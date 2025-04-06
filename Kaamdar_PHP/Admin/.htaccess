@@ -1,0 +1,19 @@
+Options -Indexes
+RewriteEngine On
+
+# Allow direct access to actual files
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Redirect all other requests to login.php if not authenticated
+RewriteCond %{REQUEST_URI} !^/Kaamdar_PHP/Admin/login\.php$
+RewriteCond %{REQUEST_URI} !^/Kaamdar_PHP/Admin/logout\.php$
+RewriteCond %{REQUEST_URI} !^/Kaamdar_PHP/Admin/assets/
+RewriteCond %{HTTP_COOKIE} !PHPSESSID= [NC]
+RewriteRule ^(.*)$ login.php [L,R=302]
+
+# Prevent directory listing
+Options -Indexes
+
+# Set default file
+DirectoryIndex login.php 
