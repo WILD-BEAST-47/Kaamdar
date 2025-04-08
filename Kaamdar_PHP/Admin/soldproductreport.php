@@ -1,5 +1,5 @@
 <?php
-define('TITLE', 'Sold Product Report');
+define('TITLE', 'Sold Products Report');
 define('PAGE', 'soldproductreport');
 include('includes/header.php');
 include('../dbConnection.php');
@@ -10,48 +10,15 @@ if(!isset($_SESSION['is_adminlogin'])) {
     exit;
 }
 
-// Check if soldproduct_tb exists, if not create it
-$check_table = $conn->query("SHOW TABLES LIKE 'soldproduct_tb'");
-if($check_table->num_rows == 0) {
-    $create_table = "CREATE TABLE soldproduct_tb (
-        sold_id INT(11) NOT NULL AUTO_INCREMENT,
-        r_login_id INT(11) NOT NULL,
-        emp_id INT(11) NOT NULL,
-        product_name VARCHAR(100) NOT NULL,
-        quantity INT(11) NOT NULL,
-        price DECIMAL(10,2) NOT NULL,
-        sold_date DATE NOT NULL,
-        PRIMARY KEY (sold_id),
-        FOREIGN KEY (r_login_id) REFERENCES requesterlogin_tb(r_login_id),
-        FOREIGN KEY (emp_id) REFERENCES technician_tb(empid)
-    )";
-    
-    if($conn->query($create_table)) {
-        echo '<div class="alert alert-success">Sold product table created successfully!</div>';
-    } else {
-        echo '<div class="alert alert-danger">Unable to create sold product table: ' . $conn->error . '</div>';
-    }
-}
-
-// Handle date filter
-$where_clause = "";
-if(isset($_POST['searchsubmit'])) {
-    $startdate = $_POST['startdate'];
-    $enddate = $_POST['enddate'];
-    
-    if(!empty($startdate) && !empty($enddate)) {
-        $where_clause = "WHERE sp.sold_date BETWEEN '$startdate' AND '$enddate'";
-    }
-}
-
-// Get all sold products with requester and technician details
-$sql = "SELECT sp.*, r.r_name as requester_name, t.empName as technician_name 
-        FROM soldproduct_tb sp 
-        LEFT JOIN requesterlogin_tb r ON sp.r_login_id = r.r_login_id 
-        LEFT JOIN technician_tb t ON sp.emp_id = t.empid 
-        $where_clause
-        ORDER BY sp.sold_id DESC";
-
+// Get all orders with product details
+$sql = "SELECT o.order_id, o.user_id, o.total_amount, o.payment_status, o.payment_method, 
+               o.created_at, r.r_name, r.r_email, r.r_mobile,
+               oi.product_id, oi.quantity, oi.price, a.pname
+        FROM orders_tb o
+        JOIN requesterlogin_tb r ON o.user_id = r.r_login_id
+        JOIN order_items_tb oi ON o.order_id = oi.order_id
+        JOIN assets_tb a ON oi.product_id = a.pid
+        ORDER BY o.created_at DESC";
 $result = $conn->query($sql);
 ?>
 
@@ -61,55 +28,27 @@ $result = $conn->query($sql);
             <div class="col-12">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <h2 class="mb-0">Sold Products</h2>
-                        <p class="text-muted">View and manage sold products</p>
+                        <h2 class="mb-0">Sold Products Report</h2>
+                        <p class="text-muted">View all sold products and orders</p>
                     </div>
-                    <a href="addsoldproduct.php" class="btn btn-primary">
-                        <i class="fas fa-plus me-2"></i>Add Sold Product
-                    </a>
                 </div>
             </div>
         </div>
 
-        <!-- Date Filter Form -->
-        <div class="card mb-4">
-            <div class="card-body">
-                <form action="" method="POST" class="row g-3">
-                    <div class="col-md-4">
-                        <label for="startdate" class="form-label">Start Date</label>
-                        <input type="date" class="form-control" id="startdate" name="startdate" 
-                               value="<?php echo isset($_POST['startdate']) ? $_POST['startdate'] : ''; ?>">
-                    </div>
-                    <div class="col-md-4">
-                        <label for="enddate" class="form-label">End Date</label>
-                        <input type="date" class="form-control" id="enddate" name="enddate" 
-                               value="<?php echo isset($_POST['enddate']) ? $_POST['enddate'] : ''; ?>">
-                    </div>
-                    <div class="col-md-4 d-flex align-items-end">
-                        <button type="submit" name="searchsubmit" class="btn btn-primary me-2">
-                            <i class="fas fa-search me-2"></i>Search
-                        </button>
-                        <a href="soldproductreport.php" class="btn btn-secondary">
-                            <i class="fas fa-sync me-2"></i>Reset
-                        </a>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-body">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
                 <div class="table-responsive">
                     <table class="table table-hover">
                         <thead>
                             <tr>
-                                <th>ID</th>
-                                <th>Requester</th>
-                                <th>Technician</th>
-                                <th>Product Name</th>
+                                <th>Order ID</th>
+                                <th>Customer</th>
+                                <th>Contact</th>
+                                <th>Product</th>
                                 <th>Quantity</th>
                                 <th>Price</th>
                                 <th>Total</th>
+                                <th>Payment</th>
                                 <th>Date</th>
                                 <th>Actions</th>
                             </tr>
@@ -120,44 +59,42 @@ $result = $conn->query($sql);
                                 while($row = $result->fetch_assoc()) {
                             ?>
                             <tr>
-                                <td>#<?php echo $row['sold_id']; ?></td>
+                                <td><?php echo $row['order_id']; ?></td>
                                 <td>
-                                    <div class="d-flex flex-column">
-                                        <span class="fw-bold"><?php echo htmlspecialchars($row['requester_name']); ?></span>
-                                        <small class="text-muted">ID: <?php echo $row['r_login_id']; ?></small>
-                                    </div>
+                                    <?php echo $row['r_name']; ?>
+                                    <small class="d-block text-muted"><?php echo $row['r_email']; ?></small>
                                 </td>
-                                <td>
-                                    <div class="d-flex flex-column">
-                                        <span class="fw-bold"><?php echo htmlspecialchars($row['technician_name']); ?></span>
-                                        <small class="text-muted">ID: <?php echo $row['emp_id']; ?></small>
-                                    </div>
-                                </td>
-                                <td><?php echo htmlspecialchars($row['product_name']); ?></td>
+                                <td><?php echo $row['r_mobile']; ?></td>
+                                <td><?php echo $row['pname']; ?></td>
                                 <td><?php echo $row['quantity']; ?></td>
                                 <td>Rs. <?php echo number_format($row['price'], 2); ?></td>
-                                <td>Rs. <?php echo number_format($row['quantity'] * $row['price'], 2); ?></td>
-                                <td><?php echo date('d M Y', strtotime($row['sold_date'])); ?></td>
+                                <td>Rs. <?php echo number_format($row['total_amount'], 2); ?></td>
                                 <td>
-                                    <div class="btn-group">
-                                        <a href="editsoldproduct.php?sold_id=<?php echo $row['sold_id']; ?>" 
-                                           class="btn btn-sm btn-outline-primary">
-                                            <i class="fas fa-edit"></i>
-                                        </a>
-                                        <a href="?delete=<?php echo $row['sold_id']; ?>" 
-                                           class="btn btn-sm btn-outline-danger"
-                                           onclick="return confirm('Are you sure you want to delete this sold product?')">
-                                            <i class="fas fa-trash"></i>
-                                        </a>
-                                    </div>
+                                    <span class="badge bg-<?php echo $row['payment_status'] == 'Paid' ? 'success' : 'warning'; ?>">
+                                        <?php echo $row['payment_status']; ?>
+                                    </span>
+                                    <small class="d-block"><?php echo $row['payment_method']; ?></small>
+                                </td>
+                                <td><?php echo date('Y-m-d H:i', strtotime($row['created_at'])); ?></td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-primary" 
+                                            onclick="viewOrder(<?php echo $row['order_id']; ?>)">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-info" 
+                                            onclick="printInvoice(<?php echo $row['order_id']; ?>)">
+                                        <i class="fas fa-print"></i>
+                                    </button>
                                 </td>
                             </tr>
                             <?php 
                                 }
                             } else {
-                                echo '<tr><td colspan="9" class="text-center">No sold products found</td></tr>';
-                            }
                             ?>
+                            <tr>
+                                <td colspan="10" class="text-center">No orders found</td>
+                            </tr>
+                            <?php } ?>
                         </tbody>
                     </table>
                 </div>
@@ -166,16 +103,17 @@ $result = $conn->query($sql);
     </div>
 </div>
 
+<script>
+function viewOrder(orderId) {
+    window.location.href = 'view-order.php?id=' + orderId;
+}
+
+function printInvoice(orderId) {
+    window.open('print-invoice.php?id=' + orderId, '_blank');
+}
+</script>
+
 <style>
-    :root {
-        --primary-color: #f3961c;
-        --secondary-color: #333;
-        --accent-color: #f3961c;
-        --text-color: #333;
-        --light-bg: #f8f9fa;
-        --dark-bg: #333;
-    }
-    
     .card {
         border: none;
         border-radius: 8px;
@@ -187,55 +125,40 @@ $result = $conn->query($sql);
     }
     
     .table th {
-        font-weight: 600;
-        color: #555;
+        background-color: #f8f9fa;
         border-bottom: 2px solid #dee2e6;
     }
     
-    .table td {
-        vertical-align: middle;
+    .badge {
+        padding: 0.5em 0.75em;
+        border-radius: 4px;
     }
     
-    .table tbody tr:hover {
-        background-color: rgba(243, 150, 28, 0.05);
+    .btn-sm {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
     }
     
-    .btn-group {
-        gap: 4px;
+    .btn-primary {
+        background-color: #f3961c;
+        border-color: #f3961c;
     }
     
-    .btn-outline-primary {
-        color: var(--primary-color);
-        border-color: var(--primary-color);
+    .btn-primary:hover {
+        background-color: #e08a1a;
+        border-color: #e08a1a;
     }
     
-    .btn-outline-primary:hover {
-        background-color: var(--primary-color);
-        border-color: var(--primary-color);
+    .btn-info {
+        background-color: #17a2b8;
+        border-color: #17a2b8;
+        color: white;
     }
     
-    .btn-outline-danger {
-        color: #dc3545;
-        border-color: #dc3545;
-    }
-    
-    .btn-outline-danger:hover {
-        background-color: #dc3545;
-        border-color: #dc3545;
-    }
-    
-    .text-muted {
-        font-size: 0.85rem;
-    }
-    
-    @media (max-width: 768px) {
-        .table-responsive {
-            margin: 0 -1rem;
-        }
-        
-        .table td, .table th {
-            padding: 0.5rem;
-        }
+    .btn-info:hover {
+        background-color: #138496;
+        border-color: #138496;
+        color: white;
     }
 </style>
 

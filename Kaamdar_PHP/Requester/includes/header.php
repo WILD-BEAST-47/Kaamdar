@@ -265,7 +265,7 @@ if(!isset($_SESSION['created'])) {
        </a>
       </li>
       <li class="nav-item">
-       <a class="nav-link <?php echo (PAGE == 'cart') ? 'active' : ''; ?>" href="cart.php">
+       <a class="nav-link <?php echo (PAGE == 'Cart') ? 'active' : ''; ?>" href="cart.php">
         <i class="fas fa-shopping-cart"></i> Cart
         <?php
         // Show cart count if items exist
@@ -281,6 +281,11 @@ if(!isset($_SESSION['created'])) {
             }
         }
         ?>
+       </a>
+      </li>
+      <li class="nav-item">
+       <a class="nav-link <?php echo (PAGE == 'MyOrders') ? 'active' : ''; ?>" href="my-orders.php">
+        <i class="fas fa-box"></i> My Orders
        </a>
       </li>
       <li class="nav-item">
