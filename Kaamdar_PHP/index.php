@@ -1,3 +1,6 @@
+<?php
+$error = false; // Initialize error variable
+?>
 <!DOCTYPE html>
 <html lang="en">
   <head>

@@ -17,7 +17,12 @@ if($_SESSION['is_login']){
             <h3 class="text-center mb-4">Service Request Status</h3>
             <?php
             // Get all service requests for the logged-in requester
-            $sql = "SELECT * FROM submitrequest_tb WHERE requester_email = ?";
+            $sql = "SELECT s.*, a.assign_date, a.assign_tech, t.empName, t.empMobile 
+                    FROM submitrequest_tb s 
+                    LEFT JOIN assignwork_tb a ON s.request_id = a.request_id 
+                    LEFT JOIN technician_tb t ON a.assign_tech = t.empid 
+                    WHERE s.requester_email = ? 
+                    ORDER BY s.request_date DESC";
             $stmt = $conn->prepare($sql);
             $stmt->bind_param("s", $rEmail);
             $stmt->execute();
@@ -39,17 +44,7 @@ if($_SESSION['is_login']){
                     <tbody>';
                 
                 while($row = $result->fetch_assoc()) {
-                    // Check if request is assigned
-                    $assign_sql = "SELECT * FROM assignwork_tb WHERE request_id = ?";
-                    $assign_stmt = $conn->prepare($assign_sql);
-                    $assign_stmt->bind_param("i", $row['request_id']);
-                    $assign_stmt->execute();
-                    $assign_result = $assign_stmt->get_result();
-                    
-                    $status = "Pending";
-                    if($assign_result->num_rows > 0) {
-                        $status = "Assigned";
-                    }
+                    $status = $row['assign_tech'] ? "Assigned" : "Pending";
                     
                     echo '<tr>
                         <td>'.$row['request_id'].'</td>
@@ -59,13 +54,54 @@ if($_SESSION['is_login']){
                         <td>'.$row['request_date'].'</td>
                         <td>'.$status.'</td>
                         <td>
-                            <a href="ViewAssignedWork.php?id='.$row['request_id'].'" class="btn btn-info">
+                            <button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#workDetailsModal'.$row['request_id'].'">
                                 <i class="fas fa-eye"></i>
-                            </a>
+                            </button>
                         </td>
                     </tr>';
                 }
                 echo '</tbody></table>';
+
+                // Add modals for each request
+                $result->data_seek(0);
+                while($row = $result->fetch_assoc()) {
+                    echo '<div class="modal fade" id="workDetailsModal'.$row['request_id'].'" tabindex="-1" aria-labelledby="workDetailsModalLabel'.$row['request_id'].'" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="workDetailsModalLabel'.$row['request_id'].'">
+                                        Work Details - Request #'.$row['request_id'].'
+                                    </h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6>Request Information</h6>
+                                            <p><strong>Service Type:</strong> '.$row['request_info'].'</p>
+                                            <p><strong>Description:</strong> '.$row['request_desc'].'</p>
+                                            <p><strong>Request Date:</strong> '.$row['request_date'].'</p>
+                                            <p><strong>City:</strong> '.$row['requester_city'].'</p>
+                                        </div>';
+                    
+                    if($row['assign_tech']) {
+                        echo '<div class="col-md-6">
+                                <h6>Technician Information</h6>
+                                <p><strong>Name:</strong> '.$row['empName'].'</p>
+                                <p><strong>Contact:</strong> '.$row['empMobile'].'</p>
+                                <p><strong>Assigned Date:</strong> '.$row['assign_date'].'</p>
+                            </div>';
+                    }
+                    
+                    echo '</div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>';
+                }
             } else {
                 echo '<div class="alert alert-info" role="alert">
                     <h4 class="alert-heading">No Service Requests Found</h4>
@@ -79,4 +115,7 @@ if($_SESSION['is_login']){
     </div>
 </div>
 
-<?php include('includes/footer.php'); ?> 
+<?php include('includes/footer.php'); ?>
+
+<!-- Bootstrap Bundle with Popper -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script> 

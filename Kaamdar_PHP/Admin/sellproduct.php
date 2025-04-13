@@ -66,7 +66,7 @@ $result = $conn->query($sql);
                                         </span>
                                     </td>
                                     <td>
-                                        <span class="fw-bold">₹<?php echo number_format($row['p_price'], 2); ?></span>
+                                        <span class="fw-bold">NPR <?php echo number_format($row['p_price'], 2); ?></span>
                                     </td>
                                     <td>
                                         <span class="badge bg-success">
@@ -101,7 +101,7 @@ $result = $conn->query($sql);
                                                             
                                                             <div class="mb-3">
                                                                 <label class="form-label">Price</label>
-                                                                <input type="text" class="form-control" value="₹<?php echo number_format($row['p_price'], 2); ?>" readonly>
+                                                                <input type="text" class="form-control" value="NPR <?php echo number_format($row['p_price'], 2); ?>" readonly>
                                                             </div>
                                                             
                                                             <div class="mb-3">

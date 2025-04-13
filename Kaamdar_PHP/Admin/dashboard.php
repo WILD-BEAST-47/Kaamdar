@@ -35,142 +35,146 @@ if ($result) {
     error_log("Error getting technicians count: " . $conn->error);
 }
 
-// Get recent requests with proper error handling
-$sql = "SELECT r.*, u.r_name as requester_name 
+// Get requests for current page
+$sql = "SELECT r.*, u.r_name as requester_name, 
+        r.status as request_status,
+        t.empName as tech_name
         FROM submitrequest_tb r 
         LEFT JOIN requesterlogin_tb u ON r.requester_email = u.r_email 
-        ORDER BY r.request_date DESC LIMIT 5";
+        LEFT JOIN assignwork_tb a ON r.request_id = a.request_id
+        LEFT JOIN technician_tb t ON a.assign_tech = t.empName
+        ORDER BY r.request_date DESC 
+        LIMIT 5";
 $result = $conn->query($sql);
 if (!$result) {
     error_log("Error getting recent requests: " . $conn->error);
 }
 ?>
 
-<!-- Main content -->
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <div class="welcome-text">
-                    <span class="text-muted">Welcome back,</span>
-                    <span class="fw-bold text-dark"><?php echo htmlspecialchars($_SESSION['admin_name']); ?></span>
-                </div>
+<div class="col-sm-9 col-md-10">
+    <div class="container-fluid py-4">
+        <div class="row mb-3">
+            <div class="col-12">
+                <h2 class="mb-1">Dashboard</h2>
+                <p class="text-muted mb-0">Welcome to your dashboard</p>
             </div>
+        </div>
 
-            <!-- Statistics Cards -->
-            <div class="row g-4 mb-4">
-                <div class="col-md-4">
-                    <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
-                        <div class="card-body p-4">
-                            <div class="d-flex align-items-center">
-                                <div class="flex-shrink-0 rounded-circle bg-warning bg-opacity-10 p-3">
-                                    <i class="fas fa-clipboard-list fa-2x text-warning"></i>
-                                </div>
-                                <div class="flex-grow-1 ms-3">
-                                    <h6 class="text-muted mb-1">Total Requests</h6>
-                                    <h3 class="mb-0 fw-bold"><?php echo $total_requests; ?></h3>
-                                </div>
+        <!-- Statistics Cards -->
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card shadow-sm">
+                    <div class="card-body py-2">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-shrink-0">
+                                <i class="fas fa-clipboard-list fa-2x text-warning"></i>
                             </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
-                        <div class="card-body p-4">
-                            <div class="d-flex align-items-center">
-                                <div class="flex-shrink-0 rounded-circle bg-success bg-opacity-10 p-3">
-                                    <i class="fas fa-tasks fa-2x text-success"></i>
-                                </div>
-                                <div class="flex-grow-1 ms-3">
-                                    <h6 class="text-muted mb-1">Assigned Works</h6>
-                                    <h3 class="mb-0 fw-bold"><?php echo $total_assigned; ?></h3>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
-                        <div class="card-body p-4">
-                            <div class="d-flex align-items-center">
-                                <div class="flex-shrink-0 rounded-circle bg-info bg-opacity-10 p-3">
-                                    <i class="fas fa-user-cog fa-2x text-info"></i>
-                                </div>
-                                <div class="flex-grow-1 ms-3">
-                                    <h6 class="text-muted mb-1">Technicians</h6>
-                                    <h3 class="mb-0 fw-bold"><?php echo $total_technicians; ?></h3>
-                                </div>
+                            <div class="flex-grow-1 ms-3">
+                                <h6 class="text-muted mb-1">Total Requests</h6>
+                                <h3 class="mb-0 fw-bold"><?php echo $total_requests; ?></h3>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-
-            <!-- Recent Requests -->
-            <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
-                <div class="card-header bg-white py-3">
-                    <div class="d-flex align-items-center">
-                        <i class="fas fa-clock text-warning me-2"></i>
-                        <h5 class="mb-0">Recent Service Requests</h5>
+            <div class="col-md-4">
+                <div class="card shadow-sm">
+                    <div class="card-body py-2">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-shrink-0">
+                                <i class="fas fa-tasks fa-2x text-success"></i>
+                            </div>
+                            <div class="flex-grow-1 ms-3">
+                                <h6 class="text-muted mb-1">Assigned Works</h6>
+                                <h3 class="mb-0 fw-bold"><?php echo $total_assigned; ?></h3>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="bg-light">
-                                <tr>
-                                    <th class="px-4 py-3">Request ID</th>
-                                    <th class="px-4 py-3">Info</th>
-                                    <th class="px-4 py-3">Requester</th>
-                                    <th class="px-4 py-3">Date</th>
-                                    <th class="px-4 py-3">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php if($result && $result->num_rows > 0): ?>
-                                    <?php while($row = $result->fetch_assoc()): ?>
+            </div>
+            <div class="col-md-4">
+                <div class="card shadow-sm">
+                    <div class="card-body py-2">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-shrink-0">
+                                <i class="fas fa-user-cog fa-2x text-info"></i>
+                            </div>
+                            <div class="flex-grow-1 ms-3">
+                                <h6 class="text-muted mb-1">Technicians</h6>
+                                <h3 class="mb-0 fw-bold"><?php echo $total_technicians; ?></h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Requests -->
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card shadow-sm">
+                    <div class="card-header">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-clock text-warning me-2"></i>
+                            <h5 class="mb-0">Recent Service Requests</h5>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
                                     <tr>
-                                        <td class="px-4 py-3">
-                                            <span class="badge bg-light text-dark">
-                                                #<?php echo str_pad($row['request_id'], 6, '0', STR_PAD_LEFT); ?>
-                                            </span>
-                                        </td>
-                                        <td class="px-4 py-3"><?php echo htmlspecialchars($row['request_info']); ?></td>
-                                        <td class="px-4 py-3">
-                                            <div class="d-flex align-items-center">
-                                                <div class="flex-shrink-0">
-                                                    <div class="avatar-circle">
-                                                        <?php echo strtoupper(substr($row['requester_name'], 0, 1)); ?>
-                                                    </div>
-                                                </div>
-                                                <div class="ms-2"><?php echo htmlspecialchars($row['requester_name']); ?></div>
-                                            </div>
-                                        </td>
-                                        <td class="px-4 py-3">
-                                            <span class="text-muted">
-                                                <?php echo date('Y-m-d', strtotime($row['request_date'])); ?>
-                                            </span>
-                                        </td>
-                                        <td class="px-4 py-3">
-                                            <form action="viewrequest.php" method="POST" class="d-inline">
-                                                <input type="hidden" name="id" value="<?php echo $row['request_id']; ?>">
-                                                <button type="submit" class="btn btn-sm btn-primary rounded-pill px-3" name="view">
-                                                    <i class="fas fa-eye me-1"></i> View
-                                                </button>
-                                            </form>
-                                        </td>
+                                        <th>Request ID</th>
+                                        <th>Info</th>
+                                        <th>Requester</th>
+                                        <th>Date</th>
+                                        <th>Action</th>
                                     </tr>
-                                    <?php endwhile; ?>
-                                <?php else: ?>
-                                    <tr>
-                                        <td colspan="5" class="text-center py-4 text-muted">
-                                            <i class="fas fa-inbox fa-2x mb-3 d-block"></i>
-                                            No recent requests found
-                                        </td>
-                                    </tr>
-                                <?php endif; ?>
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    <?php if($result && $result->num_rows > 0): ?>
+                                        <?php while($row = $result->fetch_assoc()): ?>
+                                        <tr>
+                                            <td>#<?php echo str_pad($row['request_id'], 6, '0', STR_PAD_LEFT); ?></td>
+                                            <td><?php echo htmlspecialchars($row['request_info']); ?></td>
+                                            <td><?php echo htmlspecialchars($row['requester_name']); ?></td>
+                                            <td><?php echo date('Y-m-d', strtotime($row['request_date'])); ?></td>
+                                            <td>
+                                                <?php 
+                                                $statusClass = '';
+                                                $statusIcon = '';
+                                                switch($row['request_status']) {
+                                                    case 'Assigned':
+                                                        $statusClass = 'success';
+                                                        $statusIcon = 'check-circle';
+                                                        break;
+                                                    case 'Completed':
+                                                        $statusClass = 'info';
+                                                        $statusIcon = 'check-double';
+                                                        break;
+                                                    default:
+                                                        $statusClass = 'warning';
+                                                        $statusIcon = 'clock';
+                                                }
+                                                ?>
+                                                <span class="badge bg-<?php echo $statusClass; ?>">
+                                                    <i class="fas fa-<?php echo $statusIcon; ?> me-1"></i>
+                                                    <?php echo $row['request_status']; ?>
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        <?php endwhile; ?>
+                                    <?php else: ?>
+                                        <tr>
+                                            <td colspan="5" class="text-center py-4 text-muted">
+                                                <i class="fas fa-inbox fa-2x mb-3 d-block"></i>
+                                                No recent requests found
+                                            </td>
+                                        </tr>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -180,8 +184,8 @@ if (!$result) {
 
 <style>
 .avatar-circle {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     background-color: #f3961c;
     color: white;
     border-radius: 50%;
@@ -189,7 +193,7 @@ if (!$result) {
     align-items: center;
     justify-content: center;
     font-weight: bold;
-    font-size: 14px;
+    font-size: 12px;
 }
 
 .card {
@@ -201,8 +205,8 @@ if (!$result) {
 }
 
 .rounded-circle {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -226,28 +230,28 @@ if (!$result) {
     background-color: #f3961c !important;
 }
 
-/* Add new styles for spacing */
+/* Update spacing */
 .container-fluid {
-    padding-top: 2rem;
-    padding-bottom: 2rem;
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
 }
 
 .welcome-text {
-    font-size: 1.25rem;
+    font-size: 1.1rem;
 }
 
 .card {
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
 }
 
 /* Update navbar spacing in header */
 .navbar {
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
 }
 
 /* Ensure content doesn't get hidden under fixed navbar */
 body {
-    padding-top: 60px;
+    padding-top: 56px;
 }
 </style>
 

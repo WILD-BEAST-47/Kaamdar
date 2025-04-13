@@ -1,40 +1,80 @@
 <?php    
-define('TITLE', 'Update Product');
-define('PAGE', 'assets');
+define('TITLE', 'Edit Product');
+define('PAGE', 'Edit Product');
 include('includes/header.php'); 
 include('../dbConnection.php');
-session_start();
- if(isset($_SESSION['is_adminlogin'])){
-  $aEmail = $_SESSION['aEmail'];
- } else {
-  echo "<script> location.href='login.php'; </script>";
- }
- // update
- if(isset($_REQUEST['pupdate'])){
-  // Checking for Empty Fields
-  if(($_REQUEST['pname'] == "") || ($_REQUEST['pdop'] == "") || ($_REQUEST['pava'] == "") || ($_REQUEST['ptotal'] == "") || ($_REQUEST['poriginalcost'] == "") || ($_REQUEST['psellingcost'] == "")){
-   // msg displayed if required field missing
-   $msg = '<div class="alert alert-warning col-sm-6 ml-5 mt-2" role="alert"> Fill All Fileds </div>';
-  } else {
-    // Assigning User Values to Variable
-    $pid = $_REQUEST['pid'];
-    $pname = $_REQUEST['pname'];
-    $pdop = $_REQUEST['pdop'];
-    $pava = $_REQUEST['pava'];
-    $ptotal = $_REQUEST['ptotal'];
-    $poriginalcost = $_REQUEST['poriginalcost'];
-    $psellingcost = $_REQUEST['psellingcost'];
-  $sql = "UPDATE assets_tb SET pname = '$pname', pdop = '$pdop', pava = '$pava', ptotal = '$ptotal', poriginalcost = '$poriginalcost', psellingcost = '$psellingcost' WHERE pid = '$pid'";
-    if($conn->query($sql) == TRUE){
-     // below msg display on form submit success
-     $msg = '<div class="alert alert-success col-sm-6 ml-5 mt-2" role="alert"> Updated Successfully </div>';
-    } else {
-     // below msg display on form submit failed
-     $msg = '<div class="alert alert-danger col-sm-6 ml-5 mt-2" role="alert"> Unable to Update </div>';
+
+// Check if admin is logged in
+if(!isset($_SESSION['is_adminlogin'])) {
+    echo "<script> location.href='login.php'; </script>";
+    exit;
+}
+
+// Get product details
+if(isset($_REQUEST['id'])) {
+    $pid = filter_input(INPUT_GET, 'id', FILTER_SANITIZE_NUMBER_INT);
+    $sql = "SELECT * FROM assets_tb WHERE pid = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $pid);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+}
+
+// Handle form submission
+if(isset($_REQUEST['psubmit'])) {
+    // Validate input
+    $pname = trim($_REQUEST['pname']);
+    $pdop = trim($_REQUEST['pdop']);
+    $pava = trim($_REQUEST['pava']);
+    $ptotal = trim($_REQUEST['ptotal']);
+    $poriginalcost = trim($_REQUEST['poriginalcost']);
+    $psellingcost = trim($_REQUEST['psellingcost']);
+    $description = trim($_REQUEST['description']);
+
+    // Handle image upload
+    $image_url = $row['image_url']; // Keep existing image by default
+    if(isset($_FILES['product_image']) && $_FILES['product_image']['error'] == 0) {
+        $allowed = ['jpg', 'jpeg', 'png', 'gif'];
+        $filename = $_FILES['product_image']['name'];
+        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        
+        if(in_array($ext, $allowed)) {
+            $upload_dir = '../assets/images/products/';
+            if(!file_exists($upload_dir)) {
+                mkdir($upload_dir, 0777, true);
+            }
+            
+            $new_filename = uniqid() . '.' . $ext;
+            $target_path = $upload_dir . $new_filename;
+            
+            if(move_uploaded_file($_FILES['product_image']['tmp_name'], $target_path)) {
+                // Delete old image if exists
+                if($row['image_url'] && file_exists('../' . $row['image_url'])) {
+                    unlink('../' . $row['image_url']);
+                }
+                $image_url = 'assets/images/products/' . $new_filename;
+            } else {
+                $msg = '<div class="alert alert-warning">Failed to upload image</div>';
+            }
+        } else {
+            $msg = '<div class="alert alert-warning">Invalid file type. Allowed types: ' . implode(', ', $allowed) . '</div>';
+        }
     }
-  }
-  }
- ?>
+
+    // Update product
+    $sql = "UPDATE assets_tb SET pname=?, pdop=?, pava=?, ptotal=?, poriginalcost=?, psellingcost=?, description=?, image_url=? WHERE pid=?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("ssiiddssi", $pname, $pdop, $pava, $ptotal, $poriginalcost, $psellingcost, $description, $image_url, $pid);
+    
+    if($stmt->execute()) {
+        $msg = '<div class="alert alert-success">Product Updated Successfully</div>';
+    } else {
+        $msg = '<div class="alert alert-danger">Unable to Update Product</div>';
+    }
+    $stmt->close();
+}
+?>
 <div class="col-sm-6 mt-5  mx-3 jumbotron">
   <h3 class="text-center">Update Product Details</h3>
   <?php
@@ -79,7 +119,7 @@ session_start();
         onkeypress="isInputNumber(event)">
     </div>
     <div class="text-center">
-      <button type="submit" class="btn btn-danger" id="pupdate" name="pupdate">Update</button>
+      <button type="submit" class="btn btn-danger" id="psubmit" name="psubmit">Update</button>
       <a href="assets.php" class="btn btn-secondary">Close</a>
     </div>
     <?php if(isset($msg)) {echo $msg; } ?>

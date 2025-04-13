@@ -1,4 +1,14 @@
 <?php
+/**
+ * Shopping Cart Page
+ * 
+ * This file handles the shopping cart functionality including:
+ * - Displaying cart items
+ * - Updating quantities
+ * - Removing items
+ * - Processing payments
+ */
+
 session_start();
 define('TITLE', 'Shopping Cart');
 define('PAGE', 'Cart');
@@ -14,7 +24,7 @@ if(!isset($_SESSION['is_login'])) {
 // Get user's login ID from session
 $user_id = $_SESSION['r_login_id'];
 
-// Handle remove item
+// Handle remove item from cart
 if(isset($_GET['remove']) && is_numeric($_GET['remove'])) {
     $remove_id = filter_input(INPUT_GET, 'remove', FILTER_SANITIZE_NUMBER_INT);
     $sql = "DELETE FROM shopping_cart_tb WHERE cart_id = ? AND user_id = ?";
@@ -44,88 +54,69 @@ if(isset($_POST['update_cart'])) {
 }
 
 // Handle payment success
-if (isset($_SESSION['payment_details'])) {
-    $payment_details = $_SESSION['payment_details'];
+if (isset($_SESSION['payment_details']) || isset($_POST['cash_payment'])) {
+    $payment_details = $_SESSION['payment_details'] ?? null;
     $payment_status = isset($payment_details['status']) ? $payment_details['status'] : '';
+    $is_cash_payment = isset($_POST['cash_payment']);
     
-    if ($payment_status === 'Completed') {
-        $user_id = $_SESSION['r_login_id'];
-
-        // Start transaction
-        $conn->begin_transaction();
-
-        try {
-            // Get cart items
-            $sql = "SELECT c.*, a.pname, a.psellingcost 
+    if ($payment_status === 'Completed' || $is_cash_payment) {
+        // Get cart items for order creation
+        $cart_sql = "SELECT c.*, a.pname, a.psellingcost 
                     FROM shopping_cart_tb c 
                     JOIN assets_tb a ON c.product_id = a.pid 
                     WHERE c.user_id = ?";
-            $stmt = $conn->prepare($sql);
-            $stmt->bind_param("i", $user_id);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            $items = [];
-            $total_amount = 0;
-            while($row = $result->fetch_assoc()) {
-                $items[] = $row;
-                $total_amount += ($row['psellingcost'] * $row['quantity']);
-            }
-            $stmt->close();
-
-            // Insert into orders table
-            $order_sql = "INSERT INTO orders_tb (user_id, total_amount, payment_method, payment_status, created_at) 
-                         VALUES (?, ?, 'Khalti', 'Paid', NOW())";
-            $stmt = $conn->prepare($order_sql);
-            $stmt->bind_param("id", $user_id, $total_amount);
-            $stmt->execute();
-            $order_id = $conn->insert_id;
-            $stmt->close();
-
-            // Insert order items
-            $item_sql = "INSERT INTO order_items_tb (order_id, product_id, quantity, price) 
-                         VALUES (?, ?, ?, ?)";
-            $stmt = $conn->prepare($item_sql);
-
-            foreach ($items as $item) {
-                $stmt->bind_param("iiid", $order_id, $item['product_id'], $item['quantity'], $item['psellingcost']);
-                $stmt->execute();
-
-                // Update product availability
-                $update_sql = "UPDATE assets_tb SET pava = pava - ? WHERE pid = ?";
-                $update_stmt = $conn->prepare($update_sql);
-                $update_stmt->bind_param("ii", $item['quantity'], $item['product_id']);
-                $update_stmt->execute();
-                $update_stmt->close();
-            }
-            $stmt->close();
-
-            // Clear cart
-            $clear_cart_sql = "DELETE FROM shopping_cart_tb WHERE user_id = ?";
-            $stmt = $conn->prepare($clear_cart_sql);
-            $stmt->bind_param("i", $user_id);
-            $stmt->execute();
-            $stmt->close();
-
-            // Commit transaction
-            $conn->commit();
-
-            // Set success message
-            $_SESSION['payment_success'] = true;
-            $_SESSION['order_id'] = $order_id;
-
-        } catch (Exception $e) {
-            // Rollback transaction on error
-            $conn->rollback();
-            $_SESSION['payment_error'] = "Error processing payment: " . $e->getMessage();
+        $cart_stmt = $conn->prepare($cart_sql);
+        $cart_stmt->bind_param("i", $user_id);
+        $cart_stmt->execute();
+        $cart_result = $cart_stmt->get_result();
+        $cart_items = $cart_result->fetch_all(MYSQLI_ASSOC);
+        
+        // Create order
+        $order_sql = "INSERT INTO orders_tb (user_id, total_amount, payment_method, payment_status) 
+                     VALUES (?, ?, ?, ?)";
+        $order_stmt = $conn->prepare($order_sql);
+        $payment_method = $is_cash_payment ? 'Cash' : 'Khalti';
+        $payment_status = $is_cash_payment ? 'Pending' : 'Completed';
+        $total_amount = array_sum(array_map(function($item) {
+            return $item['quantity'] * $item['psellingcost'];
+        }, $cart_items));
+        
+        $order_stmt->bind_param("idss", $user_id, $total_amount, $payment_method, $payment_status);
+        $order_stmt->execute();
+        $order_id = $conn->insert_id;
+        
+        // Create order items
+        $item_sql = "INSERT INTO order_items_tb (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)";
+        $item_stmt = $conn->prepare($item_sql);
+        
+        foreach($cart_items as $item) {
+            $item_stmt->bind_param("iiid", $order_id, $item['product_id'], $item['quantity'], $item['psellingcost']);
+            $item_stmt->execute();
+            
+            // Update product availability
+            $update_sql = "UPDATE assets_tb SET pava = pava - ? WHERE pid = ?";
+            $update_stmt = $conn->prepare($update_sql);
+            $update_stmt->bind_param("ii", $item['quantity'], $item['product_id']);
+            $update_stmt->execute();
         }
-
+        
+        // Clear cart
+        $clear_sql = "DELETE FROM shopping_cart_tb WHERE user_id = ?";
+        $clear_stmt = $conn->prepare($clear_sql);
+        $clear_stmt->bind_param("i", $user_id);
+        $clear_stmt->execute();
+        
         // Clear payment details from session
         unset($_SESSION['payment_details']);
+        
+        // Redirect to order confirmation
+        header("Location: order_confirmation.php?id=" . $order_id);
+        exit;
     }
 }
 
-// Get cart items
-$sql = "SELECT c.*, a.pname, a.psellingcost, a.image_url, a.pava as available_quantity 
+// Get cart items with product details
+$sql = "SELECT c.*, a.pname, a.psellingcost, a.pava, a.image_url 
         FROM shopping_cart_tb c 
         JOIN assets_tb a ON c.product_id = a.pid 
         WHERE c.user_id = ?";
@@ -133,16 +124,15 @@ $stmt = $conn->prepare($sql);
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $result = $stmt->get_result();
+$cart_items = $result->fetch_all(MYSQLI_ASSOC);
 
 // Calculate total
 $total = 0;
-$cart_items = [];
-while($row = $result->fetch_assoc()) {
-    $row['subtotal'] = $row['psellingcost'] * $row['quantity'];
-    $total += $row['subtotal'];
-    $cart_items[] = $row;
+foreach($cart_items as &$item) {
+    $item['subtotal'] = $item['quantity'] * $item['psellingcost'];
+    $item['available_quantity'] = $item['pava'];
+    $total += $item['subtotal'];
 }
-$stmt->close();
 
 // Store cart items in session for payment success handling
 $_SESSION['cart_items'] = $cart_items;
@@ -181,7 +171,7 @@ error_log("Cart Items Count: " . count($cart_items));
                         <h2 class="mb-0">Shopping Cart</h2>
                         <p class="text-muted">Review and manage your cart items</p>
                     </div>
-                    <a href="requesterHome.php" class="btn btn-outline-secondary">
+                    <a href="RequesterDashboard.php" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left me-2"></i>Continue Shopping
                     </a>
                 </div>
@@ -195,7 +185,7 @@ error_log("Cart Items Count: " . count($cart_items));
                 Your cart is empty. <a href="products.php" class="alert-link">Continue shopping</a>
             </div>
         <?php else: ?>
-            <form method="POST">
+            <form method="POST" id="cartForm">
                 <div class="row">
                     <div class="col-md-8">
                         <div class="cart-card p-4 mb-4">
@@ -215,28 +205,35 @@ error_log("Cart Items Count: " . count($cart_items));
                                         <tr>
                                             <td>
                                                 <div class="d-flex align-items-center">
-                                                    <img src="<?php echo htmlspecialchars($item['image_url'] ?? 'https://via.placeholder.com/100'); ?>" 
+                                                    <?php 
+                                                    $image_path = isset($item['image_url']) && $item['image_url'] ? '../' . $item['image_url'] : 'assets/images/default-product.png';
+                                                    if (!file_exists($image_path)) {
+                                                        $image_path = 'assets/images/default-product.png';
+                                                    }
+                                                    ?>
+                                                    <img src="<?php echo $image_path; ?>" 
                                                          alt="<?php echo htmlspecialchars($item['pname']); ?>" 
-                                                         class="product-image me-3">
+                                                         class="product-image me-3" style="max-height: 100px; max-width: 100px; object-fit: cover;">
                                                     <div>
                                                         <h6 class="mb-0"><?php echo htmlspecialchars($item['pname']); ?></h6>
                                                         <small class="text-muted">Available: <?php echo $item['available_quantity']; ?></small>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td>₹<?php echo number_format($item['psellingcost'], 2); ?></td>
+                                            <td>NPR <?php echo number_format($item['psellingcost'], 2); ?></td>
                                             <td>
-                                                <input type="number" name="quantity[<?php echo $item['cart_id']; ?>]" 
-                                                       class="form-control quantity-input" 
-                                                       value="<?php echo $item['quantity']; ?>" 
-                                                       min="1" max="<?php echo $item['available_quantity']; ?>">
+                                                <div class="input-group">
+                                                    <button class="btn btn-outline-secondary" type="button" onclick="updateQuantity(<?php echo $item['product_id']; ?>, -1)">-</button>
+                                                    <input type="number" class="form-control text-center" value="<?php echo $item['quantity']; ?>" min="1" max="<?php echo $item['available_quantity']; ?>" 
+                                                           onchange="updateQuantity(<?php echo $item['product_id']; ?>, this.value - <?php echo $item['quantity']; ?>)">
+                                                    <button class="btn btn-outline-secondary" type="button" onclick="updateQuantity(<?php echo $item['product_id']; ?>, 1)">+</button>
+                                                </div>
                                             </td>
-                                            <td>₹<?php echo number_format($item['subtotal'], 2); ?></td>
+                                            <td>NPR <?php echo number_format($item['subtotal'], 2); ?></td>
                                             <td>
-                                                <a href="cart.php?remove=<?php echo $item['cart_id']; ?>" 
-                                                   class="btn btn-outline-danger btn-sm">
+                                                <button class="btn btn-danger" onclick="removeFromCart(<?php echo $item['cart_id']; ?>)">
                                                     <i class="fas fa-trash"></i>
-                                                </a>
+                                                </button>
                                             </td>
                                         </tr>
                                         <?php endforeach; ?>
@@ -254,28 +251,45 @@ error_log("Cart Items Count: " . count($cart_items));
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <div class="cart-card p-4">
-                            <h5 class="mb-4">Order Summary</h5>
-                            <div class="d-flex justify-content-between mb-3">
-                                <span>Subtotal</span>
-                                <span>₹<?php echo number_format($total, 2); ?></span>
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Order Summary</h5>
                             </div>
-                            <div class="d-flex justify-content-between mb-3">
-                                <span>Shipping</span>
-                                <span>Free</span>
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>Subtotal:</span>
+                                    <span>NPR. <?php echo number_format($total, 2); ?></span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-3">
+                                    <span>Total:</span>
+                                    <span class="fw-bold">NPR. <?php echo number_format($total, 2); ?></span>
+                                </div>
+                                
+                                <div class="payment-options mb-3">
+                                    <h6 class="mb-2">Payment Method:</h6>
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="radio" name="payment_method" id="khalti" value="khalti" checked>
+                                        <label class="form-check-label" for="khalti">
+                                            <i class="fas fa-credit-card me-2"></i>Khalti Payment
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="payment_method" id="cash" value="cash">
+                                        <label class="form-check-label" for="cash">
+                                            <i class="fas fa-money-bill-wave me-2"></i>Cash on Site
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="d-grid gap-2">
+                                    <button type="button" class="btn btn-primary" id="proceedToPayment">
+                                        <i class="fas fa-lock me-2"></i>Proceed to Payment
+                                    </button>
+                                    <button type="submit" name="cash_payment" class="btn btn-success d-none" id="confirmCashPayment">
+                                        <i class="fas fa-check me-2"></i>Confirm Order
+                                    </button>
+                                </div>
                             </div>
-                            <hr>
-                            <div class="d-flex justify-content-between mb-4">
-                                <span class="fw-bold">Total</span>
-                                <span class="fw-bold">₹<?php echo number_format($total, 2); ?></span>
-                            </div>
-                            <button type="button" class="btn btn-primary w-100 mb-3" id="payWithKhalti">
-                                <img src="https://web.khalti.com/static/img/logo.png" height="20" class="me-2">
-                                Pay with Khalti
-                            </button>
-                            <a href="checkout.php" class="btn btn-outline-secondary w-100">
-                                Other Payment Methods
-                            </a>
                         </div>
                     </div>
                 </div>
@@ -341,29 +355,83 @@ error_log("Cart Items Count: " . count($cart_items));
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-document.getElementById('payWithKhalti').addEventListener('click', function() {
-    // Show loading state
-    this.disabled = true;
-    this.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
+document.addEventListener('DOMContentLoaded', function() {
+    const paymentMethod = document.querySelectorAll('input[name="payment_method"]');
+    const proceedBtn = document.getElementById('proceedToPayment');
+    const confirmCashBtn = document.getElementById('confirmCashPayment');
+    const cartForm = document.getElementById('cartForm');
     
-    // Make AJAX call to initiate payment
-    fetch('khalti-payment.php')
-        .then(response => response.json())
-        .then(data => {
-            if(data.error) {
-                alert(data.error);
-                this.disabled = false;
-                this.innerHTML = '<img src="https://web.khalti.com/static/img/logo.png" height="20" class="me-2">Pay with Khalti';
-            } else if(data.payment_url) {
-                // Redirect to Khalti payment page
-                window.location.href = data.payment_url;
+    paymentMethod.forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.value === 'cash') {
+                proceedBtn.classList.add('d-none');
+                confirmCashBtn.classList.remove('d-none');
+            } else {
+                proceedBtn.classList.remove('d-none');
+                confirmCashBtn.classList.add('d-none');
             }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred while processing your payment. Please try again.');
-            this.disabled = false;
-            this.innerHTML = '<img src="https://web.khalti.com/static/img/logo.png" height="20" class="me-2">Pay with Khalti';
         });
+    });
+
+    // Handle payment button click
+    proceedBtn.addEventListener('click', function() {
+        const selectedPayment = document.querySelector('input[name="payment_method"]:checked').value;
+        
+        if (selectedPayment === 'khalti') {
+            // Generate a unique purchase order ID
+            const purchaseOrderId = 'ORDER_' + Date.now();
+            
+            // Prepare payment data
+            const paymentData = {
+                return_url: window.location.origin + '/Kaamdar_PHP/Requester/process_payment.php',
+                website_url: window.location.origin + '/Kaamdar_PHP/Requester',
+                amount: <?php echo $total * 100; ?>, // Convert to paisa
+                purchase_order_id: purchaseOrderId,
+                purchase_order_name: 'KaamDar Products',
+                product_details: <?php 
+                    $productDetails = array_map(function($item) {
+                        return [
+                            'identity' => $item['product_id'],
+                            'name' => $item['pname'],
+                            'total_price' => $item['subtotal'] * 100,
+                            'quantity' => $item['quantity'],
+                            'unit_price' => $item['psellingcost'] * 100
+                        ];
+                    }, $cart_items);
+                    echo json_encode($productDetails, JSON_HEX_APOS | JSON_HEX_QUOT);
+                ?>
+            };
+
+            console.log('Initiating payment with data:', paymentData);
+
+            // Make API call to initiate payment
+            fetch('initiate_payment.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(paymentData)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Payment response:', data);
+                if (data.success && data.payment_url) {
+                    // Redirect to Khalti payment page
+                    window.location.href = data.payment_url;
+                } else {
+                    throw new Error(data.error || 'Payment initiation failed');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Payment failed: ' + error.message);
+            });
+        }
+    });
 });
 </script> 

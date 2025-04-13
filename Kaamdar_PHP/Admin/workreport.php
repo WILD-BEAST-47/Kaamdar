@@ -1,4 +1,5 @@
 <?php
+session_start();
 define('TITLE', 'Work Report');
 define('PAGE', 'workreport');
 include('includes/header.php');
@@ -10,12 +11,28 @@ if(!isset($_SESSION['is_adminlogin'])) {
     exit;
 }
 
-// Get work reports
-$sql = "SELECT wr.*, r.r_name, r.r_email, r.r_mobile 
-        FROM workreport_tb wr 
-        JOIN requesterlogin_tb r ON wr.requester_id = r.r_login_id 
-        ORDER BY wr.created_at DESC";
+// Get work reports with requester and technician details
+$sql = "SELECT a.*, r.r_name as requester_name, t.empName as technician_name 
+        FROM assignwork_tb a 
+        LEFT JOIN submitrequest_tb sr ON a.request_id = sr.request_id 
+        LEFT JOIN requesterlogin_tb r ON sr.requester_email = r.r_email 
+        LEFT JOIN technician_tb t ON a.assign_tech = t.empName 
+        ORDER BY a.assign_date DESC";
 $result = $conn->query($sql);
+
+// Handle report deletion
+if(isset($_POST['delete'])) {
+    $rno = filter_input(INPUT_POST, 'rno', FILTER_SANITIZE_NUMBER_INT);
+    $delete_sql = "DELETE FROM assignwork_tb WHERE rno = ?";
+    $stmt = $conn->prepare($delete_sql);
+    $stmt->bind_param("i", $rno);
+    if($stmt->execute()) {
+        echo "<script>alert('Report deleted successfully');</script>";
+        echo "<script> location.href='workreport.php'; </script>";
+    } else {
+        echo "<script>alert('Error deleting report');</script>";
+    }
+}
 ?>
 
 <div class="col-sm-9 col-md-10">
@@ -25,166 +42,94 @@ $result = $conn->query($sql);
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <h2 class="mb-0">Work Reports</h2>
-                        <p class="text-muted">View all work reports</p>
+                        <p class="text-muted">View and manage work reports</p>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="card shadow-sm border-0">
-            <div class="card-body p-4">
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Report ID</th>
-                                <th>Requester</th>
-                                <th>Email</th>
-                                <th>Mobile</th>
-                                <th>Work Type</th>
-                                <th>Description</th>
-                                <th>Status</th>
-                                <th>Created At</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php 
-                            if($result && $result->num_rows > 0) {
-                                while($row = $result->fetch_assoc()) {
-                            ?>
-                            <tr>
-                                <td><?php echo $row['report_id']; ?></td>
-                                <td><?php echo $row['r_name']; ?></td>
-                                <td><?php echo $row['r_email']; ?></td>
-                                <td><?php echo $row['r_mobile']; ?></td>
-                                <td><?php echo $row['work_type']; ?></td>
-                                <td><?php echo $row['description']; ?></td>
-                                <td>
-                                    <span class="badge bg-<?php 
-                                        echo $row['status'] == 'Pending' ? 'warning' : 
-                                            ($row['status'] == 'Completed' ? 'success' : 'danger'); 
-                                    ?>">
-                                        <?php echo $row['status']; ?>
-                                    </span>
-                                </td>
-                                <td><?php echo date('Y-m-d H:i', strtotime($row['created_at'])); ?></td>
-                                <td>
-                                    <button type="button" class="btn btn-sm btn-primary" 
-                                            onclick="viewReport(<?php echo $row['report_id']; ?>)">
-                                        <i class="fas fa-eye"></i>
-                                    </button>
-                                    <?php if($row['status'] == 'Pending'): ?>
-                                    <button type="button" class="btn btn-sm btn-success" 
-                                            onclick="updateStatus(<?php echo $row['report_id']; ?>, 'Completed')">
-                                        <i class="fas fa-check"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-danger" 
-                                            onclick="updateStatus(<?php echo $row['report_id']; ?>, 'Rejected')">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                            <?php 
-                                }
-                            } else {
-                            ?>
-                            <tr>
-                                <td colspan="9" class="text-center">No work reports found</td>
-                            </tr>
-                            <?php } ?>
-                        </tbody>
-                    </table>
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Report ID</th>
+                                        <th>Request ID</th>
+                                        <th>Requester</th>
+                                        <th>Technician</th>
+                                        <th>Assign Date</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php 
+                                    if($result->num_rows > 0) {
+                                        while($row = $result->fetch_assoc()) {
+                                            echo "<tr>
+                                                <td>#".str_pad($row['rno'], 6, '0', STR_PAD_LEFT)."</td>
+                                                <td>#".str_pad($row['request_id'], 6, '0', STR_PAD_LEFT)."</td>
+                                                <td>".htmlspecialchars($row['requester_name'])."</td>
+                                                <td>".htmlspecialchars($row['technician_name'])."</td>
+                                                <td>".date('d M Y', strtotime($row['assign_date']))."</td>
+                                                <td><span class='badge bg-success'>Assigned</span></td>
+                                                <td>
+                                                    <form method='POST' class='d-inline'>
+                                                        <input type='hidden' name='rno' value='".$row['rno']."'>
+                                                        <button type='submit' name='delete' class='btn btn-danger btn-sm' onclick='return confirm(\"Are you sure you want to delete this report?\")'>
+                                                            <i class='fas fa-trash'></i>
+                                                        </button>
+                                                    </form>
+                                                </td>
+                                            </tr>";
+                                        }
+                                    } else {
+                                        echo "<tr><td colspan='7' class='text-center'>No reports found</td></tr>";
+                                    }
+                                    ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<script>
-function viewReport(reportId) {
-    window.location.href = 'view-report.php?id=' + reportId;
-}
-
-function updateStatus(reportId, status) {
-    if(confirm('Are you sure you want to update the status to ' + status + '?')) {
-        $.ajax({
-            url: 'update-report-status.php',
-            type: 'POST',
-            data: {
-                report_id: reportId,
-                status: status
-            },
-            success: function(response) {
-                if(response.success) {
-                    location.reload();
-                } else {
-                    alert('Error updating status: ' + response.message);
-                }
-            },
-            error: function() {
-                alert('Error updating status. Please try again.');
-            }
-        });
-    }
-}
-</script>
-
 <style>
-    :root {
-        --primary-color: #f3961c;
-        --secondary-color: #333;
-        --accent-color: #f3961c;
-        --text-color: #333;
-        --light-bg: #f8f9fa;
-        --dark-bg: #333;
-    }
-    
-    .card {
-        border: none;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    .table {
-        margin-bottom: 0;
-    }
-    
-    .table th {
-        background-color: var(--light-bg);
-        border-bottom: 2px solid #dee2e6;
-    }
-    
-    .badge {
-        padding: 0.5em 0.75em;
-        border-radius: 4px;
-    }
-    
-    .btn-sm {
-        padding: 0.25rem 0.5rem;
-        font-size: 0.875rem;
-    }
-    
-    .btn-primary {
-        background-color: var(--primary-color);
-        border-color: var(--primary-color);
-    }
-    
-    .btn-primary:hover {
-        background-color: #e08a1a;
-        border-color: #e08a1a;
-    }
-    
-    .btn-success {
-        background-color: #28a745;
-        border-color: #28a745;
-    }
-    
-    .btn-danger {
-        background-color: #dc3545;
-        border-color: #dc3545;
-    }
+.card {
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.table th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.table td {
+    vertical-align: middle;
+}
+
+.badge {
+    padding: 0.5em 0.75em;
+    font-weight: 500;
+}
+
+.btn-danger {
+    background-color: #dc3545;
+    border-color: #dc3545;
+}
+
+.btn-danger:hover {
+    background-color: #c82333;
+    border-color: #bd2130;
+}
 </style>
 
 <?php include('includes/footer.php'); ?>

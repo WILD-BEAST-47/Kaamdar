@@ -222,7 +222,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <h5 class="mb-4">Order Summary</h5>
                         <div class="d-flex justify-content-between mb-3">
                             <span>Subtotal</span>
-                            <span>₹<?php echo number_format($total, 2); ?></span>
+                            <span>NPR <?php echo number_format($total, 2); ?></span>
                         </div>
                         <div class="d-flex justify-content-between mb-3">
                             <span>Shipping</span>
@@ -231,7 +231,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <hr>
                         <div class="d-flex justify-content-between mb-4">
                             <span class="fw-bold">Total</span>
-                            <span class="fw-bold">₹<?php echo number_format($total, 2); ?></span>
+                            <span class="fw-bold">NPR <?php echo number_format($total, 2); ?></span>
                         </div>
                         <button type="submit" class="btn btn-primary w-100">
                             Place Order

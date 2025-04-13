@@ -26,201 +26,114 @@ $result = $conn->query($sql);
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <h2 class="mb-0">Products</h2>
-                        <p class="text-muted">Manage your product inventory</p>
+                        <p class="text-muted">Manage your products</p>
                     </div>
                     <a href="addproduct.php" class="btn btn-primary">
-                        <i class="fas fa-plus me-2"></i>Add Product
+                        <i class="fas fa-plus me-2"></i>Add New Product
                     </a>
                 </div>
             </div>
         </div>
 
-        <?php if($result->num_rows > 0): ?>
-            <div class="card">
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Product</th>
-                                    <th>Category</th>
-                                    <th>Price</th>
-                                    <th>Stock</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php while($row = $result->fetch_assoc()): ?>
-                                <tr>
-                                    <td>
-                                        <div class="d-flex align-items-center">
-                                            <?php if($row['image_url']): ?>
-                                                <img src="<?php echo htmlspecialchars($row['image_url']); ?>" 
-                                                     alt="<?php echo htmlspecialchars($row['pname']); ?>" 
-                                                     class="rounded me-3" 
-                                                     style="width: 50px; height: 50px; object-fit: cover;">
-                                            <?php endif; ?>
-                                            <div>
-                                                <h6 class="mb-0"><?php echo htmlspecialchars($row['pname']); ?></h6>
-                                                <small class="text-muted"><?php echo htmlspecialchars($row['description']); ?></small>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-info">
-                                            <?php echo htmlspecialchars($row['category_name']); ?>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span class="fw-bold">₹<?php echo number_format($row['psellingcost'], 2); ?></span>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-success">
-                                            <?php echo htmlspecialchars($row['pava']); ?> in stock
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <?php 
-                                        $status_class = $row['pava'] > 0 ? 'bg-success' : 'bg-danger';
-                                        $status_text = $row['pava'] > 0 ? 'In Stock' : 'Out of Stock';
-                                        ?>
-                                        <span class="badge <?php echo $status_class; ?>">
-                                            <?php echo $status_text; ?>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <div class="btn-group" role="group">
-                                            <a href="editproduct.php?id=<?php echo $row['pid']; ?>" 
-                                               class="btn btn-sm btn-outline-primary">
-                                                <i class="fas fa-edit"></i>
-                                            </a>
-                                            <form action="" method="POST" class="d-inline">
-                                                <input type="hidden" name="id" value="<?php echo $row['pid']; ?>">
-                                                <button type="submit" class="btn btn-sm btn-outline-danger" name="delete" 
-                                                        onclick="return confirm('Are you sure you want to delete this product?');">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </form>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <?php endwhile; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        <?php else: ?>
-            <div class="alert alert-info">
-                <i class="fas fa-info-circle"></i> No products found.
-            </div>
-        <?php endif; ?>
-
-        <?php
-        // Handle delete request
-        if(isset($_REQUEST['delete'])) {
-            $sql = "DELETE FROM assets_tb WHERE pid = ?";
-            $stmt = $conn->prepare($sql);
-            $stmt->bind_param("i", $_REQUEST['id']);
-            
-            if($stmt->execute()) {
-                echo '<div class="alert alert-success">Product deleted successfully!</div>';
-                echo '<meta http-equiv="refresh" content="2;URL=?deleted" />';
-            } else {
-                echo '<div class="alert alert-danger">Unable to delete product.</div>';
-            }
-            $stmt->close();
+        <?php 
+        // Display success/error messages
+        if(isset($_SESSION['success_msg'])) {
+            echo $_SESSION['success_msg'];
+            unset($_SESSION['success_msg']);
+        }
+        if(isset($_SESSION['error_msg'])) {
+            echo $_SESSION['error_msg'];
+            unset($_SESSION['error_msg']);
         }
         ?>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Image</th>
+                                <th>Product</th>
+                                <th>Category</th>
+                                <th>Price</th>
+                                <th>Stock</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php while($row = $result->fetch_assoc()): ?>
+                            <tr>
+                                <td>
+                                    <?php 
+                                    $image_path = $row['image_url'] ? '../' . $row['image_url'] : '../assets/images/default-product.png';
+                                    if (!file_exists($image_path)) {
+                                        $image_path = '../assets/images/default-product.png';
+                                    }
+                                    ?>
+                                    <img src="<?php echo $image_path; ?>" 
+                                         alt="<?php echo htmlspecialchars($row['pname']); ?>" 
+                                         class="product-image" 
+                                         style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">
+                                </td>
+                                <td><?php echo htmlspecialchars($row['pname']); ?></td>
+                                <td><?php echo htmlspecialchars($row['category_name'] ?? 'Uncategorized'); ?></td>
+                                <td>NPR <?php echo number_format($row['psellingcost'], 2); ?></td>
+                                <td>
+                                    <span class="badge bg-<?php echo $row['pava'] > 0 ? 'success' : 'danger'; ?>">
+                                        <?php echo $row['pava']; ?> in stock
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-<?php echo $row['pava'] > 0 ? 'success' : 'danger'; ?>">
+                                        <?php echo $row['pava'] > 0 ? 'In Stock' : 'Out of Stock'; ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="btn-group">
+                                        <a href="editproduct.php?id=<?php echo $row['pid']; ?>" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <a href="deleteproduct.php?id=<?php echo $row['pid']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this product?');">
+                                            <i class="fas fa-trash"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            <?php endwhile; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
 <style>
-    :root {
-        --primary-color: #f3961c;
-        --secondary-color: #333;
-        --accent-color: #f3961c;
-        --text-color: #333;
-        --light-bg: #f8f9fa;
-        --dark-bg: #333;
-    }
-    
-    .card {
-        border: none;
-        border-radius: 8px;
+    .product-image {
+        width: 50px;
+        height: 50px;
+        object-fit: cover;
+        border-radius: 4px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    .table {
-        margin-bottom: 0;
-        font-size: 0.9rem;
-    }
-    
-    .table thead th {
-        border-bottom: 2px solid #dee2e6;
-        font-weight: 600;
-        text-transform: uppercase;
-        font-size: 0.8rem;
-        letter-spacing: 0.5px;
-        white-space: nowrap;
     }
     
     .table td {
         vertical-align: middle;
-        max-width: 200px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
     }
     
-    .table tbody tr:hover {
-        background-color: rgba(243, 150, 28, 0.05);
-    }
-    
-    .badge {
-        padding: 0.5em 0.75em;
-        font-weight: 500;
-        font-size: 0.8rem;
-    }
-    
-    .btn-group {
-        gap: 0.5rem;
-    }
-    
-    .btn-sm {
+    .btn-group .btn {
         padding: 0.25rem 0.5rem;
-        font-size: 0.875rem;
-    }
-    
-    .btn-outline-primary {
-        color: var(--primary-color);
-        border-color: var(--primary-color);
-    }
-    
-    .btn-outline-primary:hover {
-        background-color: var(--primary-color);
-        color: white;
-    }
-    
-    .btn-outline-danger:hover {
-        background-color: #dc3545;
-        color: white;
-    }
-
-    @media (max-width: 768px) {
-        .table-responsive {
-            margin: 0 -1rem;
-        }
-        
-        .table td, .table th {
-            padding: 0.5rem;
-        }
-        
-        .badge {
-            padding: 0.25em 0.5em;
-        }
     }
 </style>
+
+<script>
+function deleteProduct(pid) {
+    if(confirm('Are you sure you want to delete this product?')) {
+        window.location.href = 'deleteproduct.php?id=' + pid;
+    }
+}
+</script>
 
 <?php include('includes/footer.php'); ?>

@@ -13,39 +13,54 @@ if(!isset($_SESSION['is_adminlogin'])) {
 $msg = '';
 
 if(isset($_REQUEST['psubmit'])) {
-    // Sanitize and validate input
-    $pname = filter_input(INPUT_POST, 'pname', FILTER_SANITIZE_STRING);
-    $pdop = filter_input(INPUT_POST, 'pdop', FILTER_SANITIZE_STRING);
-    $pava = filter_input(INPUT_POST, 'pava', FILTER_SANITIZE_NUMBER_INT);
-    $ptotal = filter_input(INPUT_POST, 'ptotal', FILTER_SANITIZE_NUMBER_INT);
-    $poriginalcost = filter_input(INPUT_POST, 'poriginalcost', FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION);
-    $psellingcost = filter_input(INPUT_POST, 'psellingcost', FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION);
-    $category_id = filter_input(INPUT_POST, 'category_id', FILTER_SANITIZE_NUMBER_INT);
-    $description = filter_input(INPUT_POST, 'description', FILTER_SANITIZE_STRING);
+    // Validate input
+    $pname = trim($_REQUEST['pname']);
+    $pdop = trim($_REQUEST['pdop']);
+    $pava = trim($_REQUEST['pava']);
+    $ptotal = trim($_REQUEST['ptotal']);
+    $poriginalcost = trim($_REQUEST['poriginalcost']);
+    $psellingcost = trim($_REQUEST['psellingcost']);
+    $description = trim($_REQUEST['description']);
 
-    // Validate required fields
-    if(empty($pname) || empty($pdop) || empty($pava) || empty($ptotal) || 
-       empty($poriginalcost) || empty($psellingcost)) {
-        $msg = '<div class="alert alert-warning">All fields are required</div>';
-    } elseif($pava > $ptotal) {
-        $msg = '<div class="alert alert-warning">Available quantity cannot be greater than total quantity</div>';
-    } elseif($psellingcost <= $poriginalcost) {
-        $msg = '<div class="alert alert-warning">Selling cost must be greater than original cost</div>';
-    } else {
-        // Use prepared statement to prevent SQL injection
-        $sql = "INSERT INTO assets_tb (pname, pdop, pava, ptotal, poriginalcost, psellingcost, category_id, description) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+    // Handle image upload
+    $image_url = null;
+    if(isset($_FILES['product_image']) && $_FILES['product_image']['error'] == 0) {
+        $allowed = ['jpg', 'jpeg', 'png', 'gif'];
+        $filename = $_FILES['product_image']['name'];
+        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
         
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("ssiiddis", $pname, $pdop, $pava, $ptotal, $poriginalcost, $psellingcost, $category_id, $description);
-        
-        if($stmt->execute()) {
-            $msg = '<div class="alert alert-success">Product Added Successfully</div>';
+        if(in_array($ext, $allowed)) {
+            $upload_dir = '../assets/images/products/';
+            if(!file_exists($upload_dir)) {
+                mkdir($upload_dir, 0777, true);
+            }
+            
+            $new_filename = uniqid() . '.' . $ext;
+            $target_path = $upload_dir . $new_filename;
+            
+            if(move_uploaded_file($_FILES['product_image']['tmp_name'], $target_path)) {
+                $image_url = 'assets/images/products/' . $new_filename;
+            } else {
+                $msg = '<div class="alert alert-warning">Failed to upload image</div>';
+            }
         } else {
-            $msg = '<div class="alert alert-danger">Unable to Add Product</div>';
+            $msg = '<div class="alert alert-warning">Invalid file type. Allowed types: ' . implode(', ', $allowed) . '</div>';
         }
-        $stmt->close();
     }
+
+    // Insert into database
+    $sql = "INSERT INTO assets_tb (pname, pdop, pava, ptotal, poriginalcost, psellingcost, description, image_url) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+    
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("ssiiddss", $pname, $pdop, $pava, $ptotal, $poriginalcost, $psellingcost, $description, $image_url);
+    
+    if($stmt->execute()) {
+        $msg = '<div class="alert alert-success">Product Added Successfully</div>';
+    } else {
+        $msg = '<div class="alert alert-danger">Unable to Add Product</div>';
+    }
+    $stmt->close();
 }
 
 // Get categories for dropdown
@@ -60,7 +75,7 @@ $categories_result = $conn->query($categories_sql);
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <h2 class="mb-0">Add New Product</h2>
-                        <p class="text-muted">Fill in the details to add a new product</p>
+                        <p class="text-muted">Add a new product to your inventory</p>
                     </div>
                     <a href="assets.php" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left me-2"></i>Back to Products
@@ -69,111 +84,73 @@ $categories_result = $conn->query($categories_sql);
             </div>
         </div>
 
-        <?php if($msg): ?>
-            <div class="row mb-4">
-                <div class="col-12">
-                    <?php echo $msg; ?>
-                </div>
-            </div>
-        <?php endif; ?>
+        <?php if(isset($msg)) echo $msg; ?>
 
-        <div class="row justify-content-center">
-            <div class="col-lg-8">
-                <div class="card shadow-sm border-0">
-                    <div class="card-body p-4">
-                        <form action="" method="POST" class="needs-validation" novalidate>
-                            <div class="row g-3">
-                                <div class="col-md-12">
-                                    <div class="form-floating mb-3">
-                                        <input type="text" class="form-control" id="pname" name="pname" 
-                                               placeholder="Product Name" required
-                                               value="<?php echo isset($_POST['pname']) ? htmlspecialchars($_POST['pname']) : ''; ?>">
-                                        <label for="pname">Product Name</label>
-                                    </div>
-                                </div>
-
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <select class="form-select" id="category_id" name="category_id">
-                                            <option value="">Select Category</option>
-                                            <?php 
-                                            if($categories_result && $categories_result->num_rows > 0):
-                                                while($category = $categories_result->fetch_assoc()): 
-                                            ?>
-                                            <option value="<?php echo $category['category_id']; ?>"
-                                                    <?php echo (isset($_POST['category_id']) && $_POST['category_id'] == $category['category_id']) ? 'selected' : ''; ?>>
-                                                <?php echo htmlspecialchars($category['category_name']); ?>
-                                            </option>
-                                            <?php 
-                                                endwhile;
-                                            endif; 
-                                            ?>
-                                        </select>
-                                        <label for="category_id">Category</label>
-                                    </div>
-                                </div>
-
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <input type="date" class="form-control" id="pdop" name="pdop" required
-                                               value="<?php echo isset($_POST['pdop']) ? htmlspecialchars($_POST['pdop']) : ''; ?>">
-                                        <label for="pdop">Date of Purchase</label>
-                                    </div>
-                                </div>
-
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <input type="number" class="form-control" id="pava" name="pava" 
-                                               placeholder="Available" required min="0"
-                                               value="<?php echo isset($_POST['pava']) ? htmlspecialchars($_POST['pava']) : ''; ?>">
-                                        <label for="pava">Available Quantity</label>
-                                    </div>
-                                </div>
-
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <input type="number" class="form-control" id="ptotal" name="ptotal" 
-                                               placeholder="Total" required min="0"
-                                               value="<?php echo isset($_POST['ptotal']) ? htmlspecialchars($_POST['ptotal']) : ''; ?>">
-                                        <label for="ptotal">Total Quantity</label>
-                                    </div>
-                                </div>
-
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <input type="number" step="0.01" class="form-control" id="poriginalcost" 
-                                               name="poriginalcost" placeholder="Original Cost" required min="0"
-                                               value="<?php echo isset($_POST['poriginalcost']) ? htmlspecialchars($_POST['poriginalcost']) : ''; ?>">
-                                        <label for="poriginalcost">Original Cost (₹)</label>
-                                    </div>
-                                </div>
-
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <input type="number" step="0.01" class="form-control" id="psellingcost" 
-                                               name="psellingcost" placeholder="Selling Cost" required min="0"
-                                               value="<?php echo isset($_POST['psellingcost']) ? htmlspecialchars($_POST['psellingcost']) : ''; ?>">
-                                        <label for="psellingcost">Selling Cost (₹)</label>
-                                    </div>
-                                </div>
-
-                                <div class="col-12">
-                                    <div class="form-floating mb-3">
-                                        <textarea class="form-control" id="description" name="description" 
-                                                  placeholder="Description" style="height: 100px"><?php echo isset($_POST['description']) ? htmlspecialchars($_POST['description']) : ''; ?></textarea>
-                                        <label for="description">Description</label>
-                                    </div>
-                                </div>
-
-                                <div class="col-12">
-                                    <button type="submit" class="btn btn-primary w-100" name="psubmit">
-                                        <i class="fas fa-plus me-2"></i>Add Product
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
+        <div class="card">
+            <div class="card-body">
+                <form action="" method="POST" enctype="multipart/form-data">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="pname" class="form-label">Product Name</label>
+                            <input type="text" class="form-control" id="pname" name="pname" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="category_id" class="form-label">Category</label>
+                            <select class="form-select" id="category_id" name="category_id">
+                                <option value="">Select Category</option>
+                                <?php while($row = $categories_result->fetch_assoc()): ?>
+                                    <option value="<?php echo $row['category_id']; ?>">
+                                        <?php echo htmlspecialchars($row['category_name']); ?>
+                                    </option>
+                                <?php endwhile; ?>
+                            </select>
+                        </div>
                     </div>
-                </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="pdop" class="form-label">Date of Purchase</label>
+                            <input type="date" class="form-control" id="pdop" name="pdop" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="product_image" class="form-label">Product Image</label>
+                            <input type="file" class="form-control" id="product_image" name="product_image" accept="image/*">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="pava" class="form-label">Available Quantity</label>
+                            <input type="number" class="form-control" id="pava" name="pava" required min="0">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="ptotal" class="form-label">Total Quantity</label>
+                            <input type="number" class="form-control" id="ptotal" name="ptotal" required min="0">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="poriginalcost" class="form-label">Original Cost</label>
+                            <input type="number" class="form-control" id="poriginalcost" name="poriginalcost" required min="0" step="0.01">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="psellingcost" class="form-label">Selling Cost</label>
+                            <input type="number" class="form-control" id="psellingcost" name="psellingcost" required min="0" step="0.01">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                    </div>
+
+                    <div class="text-end">
+                        <button type="submit" class="btn btn-primary" name="psubmit">
+                            <i class="fas fa-plus me-2"></i>Add Product
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

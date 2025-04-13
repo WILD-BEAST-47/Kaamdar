@@ -37,46 +37,92 @@ if($result->num_rows == 0) {
     }
 }
 
+// Check if status column exists in submitrequest_tb
+$check_status_column = $conn->query("SHOW COLUMNS FROM submitrequest_tb LIKE 'status'");
+if($check_status_column->num_rows == 0) {
+    // Add status column
+    $sql = "ALTER TABLE submitrequest_tb ADD COLUMN status ENUM('Pending','Assigned','Completed') NOT NULL DEFAULT 'Pending'";
+    if($conn->query($sql)) {
+        echo '<div class="alert alert-success">Status column added successfully!</div>';
+    } else {
+        echo '<div class="alert alert-danger">Error adding status column: ' . $conn->error . '</div>';
+    }
+}
+
 // Handle request status update and technician assignment
 if(isset($_POST['update'])) {
     $request_id = $_POST['request_id'];
     $technician_id = $_POST['technician_id'];
     
-    // Check if assignment already exists
-    $check_sql = "SELECT * FROM assignwork_tb WHERE request_id = ?";
-    $check_stmt = $conn->prepare($check_sql);
-    $check_stmt->bind_param("i", $request_id);
-    $check_stmt->execute();
-    $check_result = $check_stmt->get_result();
+    // Start transaction
+    $conn->begin_transaction();
     
-    if($check_result->num_rows > 0) {
-        // Update existing assignment
-        $sql = "UPDATE assignwork_tb SET assign_tech = ? WHERE request_id = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("si", $technician_id, $request_id);
-    } else {
-        // Create new assignment
-        $sql = "INSERT INTO assignwork_tb (request_id, assign_tech) VALUES (?, ?)";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("is", $request_id, $technician_id);
-    }
-    
-    if($stmt->execute()) {
-        echo '<div class="alert alert-success">Request updated successfully!</div>';
-    } else {
-        echo '<div class="alert alert-danger">Unable to update request: ' . $conn->error . '</div>';
+    try {
+        // Check if assignment already exists
+        $check_sql = "SELECT * FROM assignwork_tb WHERE request_id = ?";
+        $check_stmt = $conn->prepare($check_sql);
+        $check_stmt->bind_param("i", $request_id);
+        $check_stmt->execute();
+        $check_result = $check_stmt->get_result();
+        
+        if($check_result->num_rows > 0) {
+            // Update existing assignment
+            $sql = "UPDATE assignwork_tb SET assign_tech = ? WHERE request_id = ?";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("si", $technician_id, $request_id);
+        } else {
+            // Create new assignment
+            $sql = "INSERT INTO assignwork_tb (request_id, assign_tech) VALUES (?, ?)";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("is", $request_id, $technician_id);
+        }
+        
+        if($stmt->execute()) {
+            // Update status in submitrequest_tb
+            $update_status_sql = "UPDATE submitrequest_tb SET status = 'Assigned' WHERE request_id = ?";
+            $update_stmt = $conn->prepare($update_status_sql);
+            $update_stmt->bind_param("i", $request_id);
+            
+            if($update_stmt->execute()) {
+                $conn->commit();
+                echo '<div class="alert alert-success">Request updated successfully!</div>';
+            } else {
+                throw new Exception("Error updating status");
+            }
+        } else {
+            throw new Exception("Error updating assignment");
+        }
+    } catch (Exception $e) {
+        $conn->rollback();
+        echo '<div class="alert alert-danger">Unable to update request: ' . $e->getMessage() . '</div>';
     }
 }
 
-// Get all requests with requester and assignment details
-$sql = "SELECT sr.*, r.r_name, r.r_email, r.r_mobile, 
-               t.empName as technician_name, aw.assign_tech
-        FROM submitrequest_tb sr 
-        LEFT JOIN requesterlogin_tb r ON sr.requester_email = r.r_email
-        LEFT JOIN assignwork_tb aw ON sr.request_id = aw.request_id
-        LEFT JOIN technician_tb t ON aw.assign_tech = t.empEmail
-        ORDER BY sr.request_id DESC";
+// Get current page number
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$records_per_page = 10;
+$offset = ($page - 1) * $records_per_page;
 
+// Get total number of records
+$sql = "SELECT COUNT(*) as total FROM submitrequest_tb";
+$result = $conn->query($sql);
+$total_records = $result->fetch_assoc()['total'];
+$total_pages = ceil($total_records / $records_per_page);
+
+// Ensure page number is valid
+if($page < 1) $page = 1;
+if($page > $total_pages) $page = $total_pages;
+
+// Get requests for current page
+$sql = "SELECT r.*, u.r_name as requester_name, 
+        r.status as request_status,
+        t.empName as tech_name
+        FROM submitrequest_tb r 
+        LEFT JOIN requesterlogin_tb u ON r.requester_email = u.r_email 
+        LEFT JOIN assignwork_tb a ON r.request_id = a.request_id
+        LEFT JOIN technician_tb t ON a.assign_tech = t.empName
+        ORDER BY r.request_date DESC 
+        LIMIT $offset, $records_per_page";
 $result = $conn->query($sql);
 
 // Get all technicians for the dropdown
@@ -117,8 +163,21 @@ $technicians_result = $conn->query($technicians_sql);
                             <?php 
                             if($result && $result->num_rows > 0) {
                                 while($row = $result->fetch_assoc()) {
-                                    $statusClass = $row['technician_name'] ? 'success' : 'danger';
-                                    $statusIcon = $row['technician_name'] ? 'check-circle' : 'times-circle';
+                                    $statusClass = '';
+                                    $statusIcon = '';
+                                    switch($row['request_status']) {
+                                        case 'Assigned':
+                                            $statusClass = 'success';
+                                            $statusIcon = 'check-circle';
+                                            break;
+                                        case 'Completed':
+                                            $statusClass = 'info';
+                                            $statusIcon = 'check-double';
+                                            break;
+                                        default:
+                                            $statusClass = 'warning';
+                                            $statusIcon = 'clock';
+                                    }
                             ?>
                             <tr>
                                 <td>#<?php echo $row['request_id']; ?></td>
@@ -135,12 +194,12 @@ $technicians_result = $conn->query($technicians_sql);
                                 <td>
                                     <span class="badge bg-<?php echo $statusClass; ?>">
                                         <i class="fas fa-<?php echo $statusIcon; ?> me-1"></i>
-                                        <?php echo $row['technician_name'] ? 'Assigned' : 'Pending'; ?>
+                                        <?php echo $row['request_status']; ?>
                                     </span>
                                 </td>
                                 <td>
-                                    <?php if($row['technician_name']) { ?>
-                                        <span class="fw-bold"><?php echo htmlspecialchars($row['technician_name']); ?></span>
+                                    <?php if($row['tech_name']) { ?>
+                                        <span class="fw-bold"><?php echo htmlspecialchars($row['tech_name']); ?></span>
                                     <?php } else { ?>
                                         <span class="text-muted">Not Assigned</span>
                                     <?php } ?>
@@ -198,6 +257,78 @@ $technicians_result = $conn->query($technicians_sql);
                             ?>
                         </tbody>
                     </table>
+                    
+                    <!-- Pagination -->
+                    <div class="d-flex justify-content-between align-items-center mt-4">
+                        <div class="text-muted">
+                            Showing <?php echo $offset + 1; ?> to <?php echo min($offset + $records_per_page, $total_records); ?> of <?php echo $total_records; ?> entries
+                        </div>
+                        
+                        <nav aria-label="Page navigation">
+                            <ul class="pagination mb-0">
+                                <!-- First Page -->
+                                <?php if($page > 1): ?>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=1" aria-label="First">
+                                        <span aria-hidden="true">&laquo;&laquo;</span>
+                                    </a>
+                                </li>
+                                <?php endif; ?>
+                                
+                                <!-- Previous Page -->
+                                <?php if($page > 1): ?>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=<?php echo $page-1; ?>" aria-label="Previous">
+                                        <span aria-hidden="true">&laquo;</span>
+                                    </a>
+                                </li>
+                                <?php endif; ?>
+                                
+                                <!-- Page Numbers -->
+                                <?php
+                                $start_page = max(1, $page - 2);
+                                $end_page = min($total_pages, $page + 2);
+                                
+                                if($start_page > 1) {
+                                    echo '<li class="page-item"><a class="page-link" href="?page=1">1</a></li>';
+                                    if($start_page > 2) {
+                                        echo '<li class="page-item disabled"><span class="page-link">...</span></li>';
+                                    }
+                                }
+                                
+                                for($i = $start_page; $i <= $end_page; $i++) {
+                                    $active = $i == $page ? 'active' : '';
+                                    echo "<li class='page-item $active'><a class='page-link' href='?page=$i'>$i</a></li>";
+                                }
+                                
+                                if($end_page < $total_pages) {
+                                    if($end_page < $total_pages - 1) {
+                                        echo '<li class="page-item disabled"><span class="page-link">...</span></li>';
+                                    }
+                                    echo "<li class='page-item'><a class='page-link' href='?page=$total_pages'>$total_pages</a></li>";
+                                }
+                                ?>
+                                
+                                <!-- Next Page -->
+                                <?php if($page < $total_pages): ?>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=<?php echo $page+1; ?>" aria-label="Next">
+                                        <span aria-hidden="true">&raquo;</span>
+                                    </a>
+                                </li>
+                                <?php endif; ?>
+                                
+                                <!-- Last Page -->
+                                <?php if($page < $total_pages): ?>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=<?php echo $total_pages; ?>" aria-label="Last">
+                                        <span aria-hidden="true">&raquo;&raquo;</span>
+                                    </a>
+                                </li>
+                                <?php endif; ?>
+                            </ul>
+                        </nav>
+                    </div>
                 </div>
             </div>
         </div>
@@ -373,6 +504,55 @@ $technicians_result = $conn->query($technicians_sql);
     body.modal-open {
         overflow: hidden;
     }
+
+    /* Enhanced Pagination styles */
+    .pagination {
+        margin-bottom: 0;
+        gap: 0.25rem;
+    }
+
+    .page-link {
+        color: #f3961c;
+        border-color: #f3961c;
+        padding: 0.5rem 0.75rem;
+        min-width: 2.5rem;
+        text-align: center;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+    }
+
+    .page-link:hover {
+        color: #fff;
+        background-color: #f3961c;
+        border-color: #f3961c;
+        transform: translateY(-1px);
+    }
+
+    .page-item.active .page-link {
+        background-color: #f3961c;
+        border-color: #f3961c;
+        font-weight: 600;
+    }
+
+    .page-item.disabled .page-link {
+        color: #6c757d;
+        pointer-events: none;
+        background-color: #fff;
+        border-color: #dee2e6;
+    }
+
+    /* Responsive pagination */
+    @media (max-width: 768px) {
+        .pagination {
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .page-link {
+            padding: 0.375rem 0.5rem;
+            min-width: 2rem;
+        }
+    }
 </style>
 
 <script>
@@ -411,6 +591,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 dialog.style.transform = 'translate(-50%, -50%)';
             }
         }
+    });
+
+    // Add smooth scrolling to top when changing pages
+    const paginationLinks = document.querySelectorAll('.pagination .page-link');
+    paginationLinks.forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const href = this.getAttribute('href');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            setTimeout(() => {
+                window.location.href = href;
+            }, 300);
+        });
     });
 });
 </script>

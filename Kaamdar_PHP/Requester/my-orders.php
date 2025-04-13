@@ -70,9 +70,9 @@ $orders = $stmt->get_result();
                                 
                                 <div class="d-flex justify-content-between mb-3">
                                     <span>Total Amount:</span>
-                                    <span class="fw-bold">₹<?php echo number_format($order['total_amount'], 2); ?></span>
+                                    <span class="fw-bold">Rs. <?php echo number_format($order['total_amount'], 2); ?></span>
                                 </div>
-                                
+                                    
                                 <div class="d-flex justify-content-between align-items-center">
                                     <small class="text-muted">Payment via <?php echo $order['payment_method']; ?></small>
                                     <button type="button" class="btn btn-primary btn-sm" 

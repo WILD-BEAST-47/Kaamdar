@@ -83,16 +83,16 @@ $result->data_seek(0);
                             </div>
                         </div>
                     </td>
-                    <td>₹<?php echo number_format($item['price'], 2); ?></td>
+                    <td>NPR <?php echo number_format($item['price'], 2); ?></td>
                     <td><?php echo $item['quantity']; ?></td>
-                    <td class="text-end">₹<?php echo number_format($item_total, 2); ?></td>
+                    <td class="text-end">NPR <?php echo number_format($item_total, 2); ?></td>
                 </tr>
                 <?php endwhile; ?>
             </tbody>
             <tfoot>
                 <tr>
                     <td colspan="3" class="text-end"><strong>Total Amount:</strong></td>
-                    <td class="text-end"><strong>₹<?php echo number_format($total, 2); ?></strong></td>
+                    <td class="text-end"><strong>NPR <?php echo number_format($total, 2); ?></strong></td>
                 </tr>
             </tfoot>
         </table>

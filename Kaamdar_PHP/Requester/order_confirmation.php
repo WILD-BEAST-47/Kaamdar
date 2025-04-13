@@ -79,7 +79,7 @@ $items_result = $items_stmt->get_result();
                                                 </span>
                                             </li>
                                             <li><strong>Payment Method:</strong> <?php echo ucfirst($order['payment_method']); ?></li>
-                                            <li><strong>Total Amount:</strong> ₹<?php echo number_format($order['total_amount'], 2); ?></li>
+                                            <li><strong>Total Amount:</strong> NPR <?php echo number_format($order['total_amount'], 2); ?></li>
                                         </ul>
                                     </div>
                                 </div>
@@ -133,16 +133,16 @@ $items_result = $items_stmt->get_result();
                                                             <div><?php echo htmlspecialchars($item['pname']); ?></div>
                                                         </div>
                                                     </td>
-                                                    <td>₹<?php echo number_format($item['price'], 2); ?></td>
+                                                    <td>NPR <?php echo number_format($item['price'], 2); ?></td>
                                                     <td><?php echo $item['quantity']; ?></td>
-                                                    <td>₹<?php echo number_format($item['price'] * $item['quantity'], 2); ?></td>
+                                                    <td>NPR <?php echo number_format($item['price'] * $item['quantity'], 2); ?></td>
                                                 </tr>
                                             <?php endwhile; ?>
                                         </tbody>
                                         <tfoot>
                                             <tr>
                                                 <td colspan="3" class="text-end"><strong>Total:</strong></td>
-                                                <td><strong>₹<?php echo number_format($order['total_amount'], 2); ?></strong></td>
+                                                <td><strong>NPR <?php echo number_format($order['total_amount'], 2); ?></strong></td>
                                             </tr>
                                         </tfoot>
                                     </table>
