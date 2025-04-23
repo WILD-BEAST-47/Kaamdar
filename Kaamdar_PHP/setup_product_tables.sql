@@ -70,4 +70,18 @@ CREATE TABLE IF NOT EXISTS `order_items_tb` (
   KEY `product_id` (`product_id`),
   CONSTRAINT `order_items_tb_ibfk_1` FOREIGN KEY (`order_id`) REFERENCES `orders_tb` (`order_id`) ON DELETE CASCADE,
   CONSTRAINT `order_items_tb_ibfk_2` FOREIGN KEY (`product_id`) REFERENCES `assets_tb` (`pid`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4; 
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Create technician performance metrics table
+CREATE TABLE IF NOT EXISTS technician_performance (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    technician_id INT NOT NULL,
+    request_id INT NOT NULL,
+    completion_time INT, -- in minutes
+    customer_rating INT, -- 1-5 stars
+    quality_score INT, -- 1-10
+    feedback TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (technician_id) REFERENCES technician_tb(empid),
+    FOREIGN KEY (request_id) REFERENCES submitrequest_tb(request_id)
+); 

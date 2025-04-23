@@ -1,9 +1,9 @@
 <?php
-define('TITLE', 'Work Orders');
+define('TITLE', 'Work Order');
 define('PAGE', 'work');
+include('../dbConnection.php');
 include('includes/header.php');
 include('includes/sidebar.php');
-include('../dbConnection.php');
 
 // Check if admin is logged in
 if(!isset($_SESSION['is_adminlogin'])) {
@@ -29,7 +29,8 @@ if($page > $total_pages) $page = $total_pages;
 // Get requests for current page
 $sql = "SELECT r.*, u.r_name as requester_name, 
         r.status as request_status,
-        t.empName as tech_name
+        t.empName as tech_name,
+        a.assign_date
         FROM submitrequest_tb r 
         LEFT JOIN requesterlogin_tb u ON r.requester_email = u.r_email 
         LEFT JOIN assignwork_tb a ON r.request_id = a.request_id
@@ -95,7 +96,7 @@ $result = $conn->query($sql);
                                                 Assign Work
                                             </a>
                                             <?php else: ?>
-                                            <button type="button" class="btn btn-info btn-sm" 
+                                            <button type="button" class="btn btn-info btn-sm view-details-btn" 
                                                     data-bs-toggle="modal" 
                                                     data-bs-target="#workDetailsModal"
                                                     data-request-id="<?php echo $row['request_id']; ?>"
@@ -106,8 +107,8 @@ $result = $conn->query($sql);
                                                     data-request-info="<?php echo htmlspecialchars($row['request_info']); ?>"
                                                     data-request-desc="<?php echo htmlspecialchars($row['request_desc']); ?>"
                                                     data-request-date="<?php echo date('Y-m-d', strtotime($row['request_date'])); ?>"
-                                                    data-tech-name="<?php echo htmlspecialchars($row['tech_name']); ?>"
-                                                    data-assign-date="<?php echo date('Y-m-d', strtotime($row['assign_date'])); ?>">
+                                                    data-tech-name="<?php echo htmlspecialchars($row['tech_name'] ?? 'Not Assigned'); ?>"
+                                                    data-assign-date="<?php echo isset($row['assign_date']) ? date('Y-m-d', strtotime($row['assign_date'])) : 'Not Assigned'; ?>">
                                                 View Details
                                             </button>
                                             <?php endif; ?>
@@ -313,8 +314,8 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('modal-requester-email').textContent = requesterEmail;
         document.getElementById('modal-requester-mobile').textContent = requesterMobile;
         document.getElementById('modal-requester-address').textContent = requesterAddress;
-        document.getElementById('modal-request-info').textContent = requestInfo;
-        document.getElementById('modal-request-desc').textContent = requestDesc;
+        document.getElementById('modal-request-info').textContent = requestInfo || 'Not specified';
+        document.getElementById('modal-request-desc').textContent = requestDesc || 'No description provided';
         document.getElementById('modal-request-date').textContent = requestDate;
         document.getElementById('modal-tech-name').textContent = techName;
         document.getElementById('modal-assign-date').textContent = assignDate;
