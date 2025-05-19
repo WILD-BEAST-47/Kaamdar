@@ -13,18 +13,27 @@ if(!isset($_SESSION['is_login'])) {
 
 $user_id = $_SESSION['r_login_id'];
 
-// Get all orders for the user
-$sql = "SELECT o.*, 
-               COUNT(oi.order_id) as total_items
-        FROM orders_tb o
-        LEFT JOIN order_items_tb oi ON o.order_id = oi.order_id
-        WHERE o.user_id = ?
-        GROUP BY o.order_id
+// Handle order cancellation
+if(isset($_POST['cancel_order'])) {
+    $order_id = $_POST['order_id'];
+    $sql = "UPDATE orders_tb SET order_status = 'Cancelled' WHERE order_id = ? AND user_id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("ii", $order_id, $user_id);
+    $stmt->execute();
+    $stmt->close();
+}
+
+// Fetch orders
+$sql = "SELECT o.*, GROUP_CONCAT(oi.product_id) as product_ids, GROUP_CONCAT(oi.quantity) as quantities, GROUP_CONCAT(oi.price) as prices 
+        FROM orders_tb o 
+        JOIN order_items_tb oi ON o.order_id = oi.order_id 
+        WHERE o.user_id = ? 
+        GROUP BY o.order_id 
         ORDER BY o.created_at DESC";
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
-$orders = $stmt->get_result();
+$result = $stmt->get_result();
 ?>
 
 <div class="col-sm-9 col-md-10">
@@ -46,88 +55,120 @@ $orders = $stmt->get_result();
             unset($_SESSION['order_id']);
         endif; ?>
 
-        <?php if($orders->num_rows > 0): ?>
-            <div class="row">
-                <?php while($order = $orders->fetch_assoc()): ?>
-                    <div class="col-md-6 mb-4">
-                        <div class="card shadow-sm">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h5 class="card-title mb-0">Order #<?php echo $order['order_id']; ?></h5>
+        <div class="row">
+            <?php while($order = $result->fetch_assoc()): 
+                $product_ids = explode(',', $order['product_ids']);
+                $quantities = explode(',', $order['quantities']);
+                $prices = explode(',', $order['prices']);
+            ?>
+                <div class="col-md-6 mb-4">
+                    <div class="card shadow-sm">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">Order #<?php echo str_pad($order['order_id'], 6, '0', STR_PAD_LEFT); ?></h5>
+                            <span class="badge bg-<?php 
+                                echo $order['order_status'] == 'Processing' ? 'warning' : 
+                                    ($order['order_status'] == 'Completed' ? 'success' : 
+                                    ($order['order_status'] == 'Cancelled' ? 'danger' : 'info')); 
+                            ?>">
+                                <?php echo $order['order_status']; ?>
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <p class="mb-1"><strong>Order Date:</strong> <?php echo date('F j, Y, g:i a', strtotime($order['created_at'])); ?></p>
+                                <p class="mb-1"><strong>Payment Method:</strong> <?php echo $order['payment_method']; ?></p>
+                                <p class="mb-1"><strong>Payment Status:</strong> 
                                     <span class="badge bg-<?php echo $order['payment_status'] == 'Paid' ? 'success' : 'warning'; ?>">
                                         <?php echo $order['payment_status']; ?>
                                     </span>
-                                </div>
-                                
-                                <div class="mb-3">
-                                    <small class="text-muted">Ordered on: <?php echo date('F j, Y, g:i a', strtotime($order['created_at'])); ?></small>
-                                </div>
-                                
-                                <div class="d-flex justify-content-between mb-3">
-                                    <span>Total Items:</span>
-                                    <span><?php echo $order['total_items']; ?></span>
-                                </div>
-                                
-                                <div class="d-flex justify-content-between mb-3">
-                                    <span>Total Amount:</span>
-                                    <span class="fw-bold">Rs. <?php echo number_format($order['total_amount'], 2); ?></span>
-                                </div>
-                                    
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <small class="text-muted">Payment via <?php echo $order['payment_method']; ?></small>
-                                    <button type="button" class="btn btn-primary btn-sm" 
-                                            onclick="viewOrderDetails(<?php echo $order['order_id']; ?>)">
-                                        View Details
-                                    </button>
-                                </div>
+                                </p>
+                                <p class="mb-1"><strong>Total Amount:</strong> NPR <?php echo number_format($order['total_amount'], 2); ?></p>
                             </div>
-                        </div>
-                    </div>
-                <?php endwhile; ?>
-            </div>
+                            
+                            <h6 class="mb-3">Order Items:</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Product</th>
+                                            <th>Quantity</th>
+                                            <th>Price</th>
+                                            <th>Subtotal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php for($i = 0; $i < count($product_ids); $i++): 
+                                            $product_sql = "SELECT pname FROM assets_tb WHERE pid = ?";
+                                            $product_stmt = $conn->prepare($product_sql);
+                                            $product_stmt->bind_param("i", $product_ids[$i]);
+                                            $product_stmt->execute();
+                                            $product_result = $product_stmt->get_result();
+                                            $product = $product_result->fetch_assoc();
+                                            $subtotal = $quantities[$i] * $prices[$i];
+                                        ?>
+                                            <tr>
+                                                <td><?php echo htmlspecialchars($product['pname']); ?></td>
+                                                <td><?php echo $quantities[$i]; ?></td>
+                                                <td>NPR <?php echo number_format($prices[$i], 2); ?></td>
+                                                <td>NPR <?php echo number_format($subtotal, 2); ?></td>
+                                            </tr>
+                                        <?php endfor; ?>
+                                    </tbody>
+                                </table>
+                            </div>
 
-            <!-- Order Details Modal -->
-            <div class="modal fade" id="orderDetailsModal" tabindex="-1">
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Order Details</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body" id="orderDetailsContent">
-                            Loading...
+                            <?php if($order['order_status'] == 'Processing'): ?>
+                                <form action="" method="POST" class="mt-3">
+                                    <input type="hidden" name="order_id" value="<?php echo $order['order_id']; ?>">
+                                    <button type="submit" name="cancel_order" class="btn btn-danger btn-sm" 
+                                            onclick="return confirm('Are you sure you want to cancel this order?')">
+                                        <i class="fas fa-times me-1"></i>Cancel Order
+                                    </button>
+                                </form>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
-            </div>
-
-        <?php else: ?>
-            <div class="alert alert-info">
-                You haven't placed any orders yet. <a href="products.php" class="alert-link">Start shopping</a>
-            </div>
-        <?php endif; ?>
+            <?php endwhile; ?>
+        </div>
     </div>
 </div>
 
-<script>
-function viewOrderDetails(orderId) {
-    const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
-    const contentDiv = document.getElementById('orderDetailsContent');
-    
-    // Show modal with loading state
-    modal.show();
-    contentDiv.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div></div>';
-    
-    // Fetch order details
-    fetch(`get-order-details.php?id=${orderId}`)
-        .then(response => response.text())
-        .then(html => {
-            contentDiv.innerHTML = html;
-        })
-        .catch(error => {
-            contentDiv.innerHTML = '<div class="alert alert-danger">Error loading order details. Please try again.</div>';
-        });
+<style>
+.card {
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
-</script>
+
+.card-header {
+    background-color: #fff;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+}
+
+.table {
+    margin-bottom: 0;
+}
+
+.table th {
+    font-weight: 600;
+    color: #666;
+}
+
+.badge {
+    font-weight: 500;
+    padding: 0.5em 0.8em;
+}
+
+.btn-danger {
+    background-color: #dc3545;
+    border-color: #dc3545;
+}
+
+.btn-danger:hover {
+    background-color: #c82333;
+    border-color: #bd2130;
+}
+</style>
 
 <?php include('includes/footer.php'); ?> 

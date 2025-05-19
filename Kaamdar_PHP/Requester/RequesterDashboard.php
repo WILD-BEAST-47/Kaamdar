@@ -30,7 +30,9 @@ $request_result = $request_stmt->get_result();
 $request_row = $request_result->fetch_assoc();
 
 // Get assigned work
-$assign_sql = "SELECT COUNT(*) as assigned_work FROM assignwork_tb WHERE requester_email = ?";
+$assign_sql = "SELECT COUNT(*) as assigned_work FROM assignwork_tb a 
+               JOIN submitrequest_tb s ON a.request_id = s.request_id 
+               WHERE s.requester_email = ?";
 $assign_stmt = $conn->prepare($assign_sql);
 $assign_stmt->bind_param("s", $rEmail);
 $assign_stmt->execute();
@@ -123,34 +125,33 @@ $assign_row = $assign_result->fetch_assoc();
                                 </thead>
                                 <tbody>
                                     <?php
-                                    $recent_sql = "SELECT r.*, 
-                                                 CASE WHEN a.request_id IS NOT NULL THEN 'Assigned' ELSE 'Pending' END as request_status
-                                          FROM submitrequest_tb r
-                                          LEFT JOIN assignwork_tb a ON r.request_id = a.request_id
-                                          WHERE r.requester_email = ?
-                                          ORDER BY r.request_date DESC
-                                          LIMIT 5";
-                                    $recent_stmt = $conn->prepare($recent_sql);
-                                    $recent_stmt->bind_param("s", $rEmail);
-                                    $recent_stmt->execute();
-                                    $recent_result = $recent_stmt->get_result();
+                                    $sql = "SELECT r.*, a.assign_tech, a.assign_date, t.empName, t.empMobile 
+                                            FROM submitrequest_tb r 
+                                            LEFT JOIN assignwork_tb a ON r.request_id = a.request_id 
+                                            LEFT JOIN technician_tb t ON a.assign_tech = t.empid 
+                                            WHERE r.requester_email = ? 
+                                            ORDER BY r.request_date DESC, r.request_id DESC";
+                                    $stmt = $conn->prepare($sql);
+                                    $stmt->bind_param("s", $rEmail);
+                                    $stmt->execute();
+                                    $result = $stmt->get_result();
                                     
-                                    while($recent_row = $recent_result->fetch_assoc()):
+                                    while($row = $result->fetch_assoc()):
                                     ?>
                                     <tr>
-                                        <td>#<?php echo $recent_row['request_id']; ?></td>
-                                        <td><?php echo $recent_row['request_info']; ?></td>
-                                        <td><?php echo substr($recent_row['request_desc'], 0, 50) . '...'; ?></td>
-                                        <td><?php echo date('Y-m-d', strtotime($recent_row['request_date'])); ?></td>
+                                        <td>#<?php echo $row['request_id']; ?></td>
+                                        <td><?php echo $row['request_info']; ?></td>
+                                        <td><?php echo substr($row['request_desc'], 0, 50) . '...'; ?></td>
+                                        <td><?php echo date('Y-m-d', strtotime($row['request_date'])); ?></td>
                                         <td>
-                                            <?php if($recent_row['request_status'] == 'Assigned'): ?>
+                                            <?php if($row['assign_tech']): ?>
                                             <span class="badge bg-success">Assigned</span>
                                             <?php else: ?>
                                             <span class="badge bg-warning">Pending</span>
                                             <?php endif; ?>
                                         </td>
                                         <td>
-                                            <a href="ServiceStatus.php?id=<?php echo $recent_row['request_id']; ?>" 
+                                            <a href="ServiceStatus.php?id=<?php echo $row['request_id']; ?>" 
                                                class="btn btn-info btn-sm">
                                                 View Details
                                             </a>

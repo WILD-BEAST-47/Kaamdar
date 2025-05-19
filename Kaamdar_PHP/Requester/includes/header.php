@@ -346,6 +346,12 @@ if(!isset($_SESSION['created'])) {
        </a>
       </li>
       <li class="nav-item">
+       <a class="nav-link <?php if(PAGE == 'myorders') { echo 'active'; } ?>" href="my-orders.php">
+        <i class="fas fa-list"></i>
+        My Orders
+       </a>
+      </li>
+      <li class="nav-item">
        <a class="nav-link <?php if(PAGE == 'requesterprofile') { echo 'active'; } ?>" href="RequesterProfile.php">
         <i class="fas fa-user"></i>
         Profile

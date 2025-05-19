@@ -16,8 +16,8 @@ $sql = "SELECT a.*, r.r_name as requester_name, t.empName as technician_name
         FROM assignwork_tb a 
         LEFT JOIN submitrequest_tb sr ON a.request_id = sr.request_id 
         LEFT JOIN requesterlogin_tb r ON sr.requester_email = r.r_email 
-        LEFT JOIN technician_tb t ON a.assign_tech = t.empName 
-        ORDER BY a.assign_date DESC";
+        LEFT JOIN technician_tb t ON a.assign_tech = t.empid 
+        ORDER BY a.assign_date DESC, a.rno DESC";
 $result = $conn->query($sql);
 
 // Handle report deletion

@@ -1,6 +1,13 @@
-<?php
+<?php ob_start(); ?>
 define('TITLE', 'Work Order');
 define('PAGE', 'WorkOrder');
+
+// Handle form submissions and redirects here
+if ($should_redirect) {
+    header("Location: ...");
+    exit;
+}
+
 include('includes/header.php'); 
 include('../dbConnection.php');
 
@@ -143,4 +150,5 @@ if(isset($_POST['submit'])) {
     </div>
 </div>
 
-<?php include('includes/footer.php'); ?> 
+<?php include('includes/footer.php'); ?>
+<?php ob_end_flush(); ?> 

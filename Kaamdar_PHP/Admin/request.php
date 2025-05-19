@@ -8,6 +8,7 @@ define('TITLE', 'Requests');
 define('PAGE', 'request');
 include('includes/header.php'); 
 include('../dbConnection.php');
+require_once('../Requester/mail_config.php');
 
 // Check if admin is logged in
 if(!isset($_SESSION['is_adminlogin'])) {
@@ -58,6 +59,24 @@ if(isset($_POST['update'])) {
     $conn->begin_transaction();
     
     try {
+        // Get request and technician details for email
+        $req_sql = "SELECT r.*, u.r_name as requester_name 
+                    FROM submitrequest_tb r 
+                    LEFT JOIN requesterlogin_tb u ON r.requester_email = u.r_email 
+                    WHERE r.request_id = ?";
+        $req_stmt = $conn->prepare($req_sql);
+        $req_stmt->bind_param("i", $request_id);
+        $req_stmt->execute();
+        $req_result = $req_stmt->get_result();
+        $request = $req_result->fetch_assoc();
+
+        $tech_sql = "SELECT * FROM technician_tb WHERE empid = ?";
+        $tech_stmt = $conn->prepare($tech_sql);
+        $tech_stmt->bind_param("i", $technician_id);
+        $tech_stmt->execute();
+        $tech_result = $tech_stmt->get_result();
+        $technician = $tech_result->fetch_assoc();
+
         // Check if assignment already exists
         $check_sql = "SELECT * FROM assignwork_tb WHERE request_id = ?";
         $check_stmt = $conn->prepare($check_sql);
@@ -69,12 +88,12 @@ if(isset($_POST['update'])) {
             // Update existing assignment
             $sql = "UPDATE assignwork_tb SET assign_tech = ? WHERE request_id = ?";
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param("si", $technician_id, $request_id);
+            $stmt->bind_param("ii", $technician_id, $request_id);
         } else {
             // Create new assignment
             $sql = "INSERT INTO assignwork_tb (request_id, assign_tech) VALUES (?, ?)";
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param("is", $request_id, $technician_id);
+            $stmt->bind_param("ii", $request_id, $technician_id);
         }
         
         if($stmt->execute()) {
@@ -84,8 +103,70 @@ if(isset($_POST['update'])) {
             $update_stmt->bind_param("i", $request_id);
             
             if($update_stmt->execute()) {
-                $conn->commit();
-                echo '<div class="alert alert-success">Request updated successfully!</div>';
+                // Send email to requester
+                $req_subject = "Service Request Update - KaamDar";
+                $req_body = "
+                    <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;'>
+                        <div style='background: linear-gradient(135deg, #f3961c 0%, #e67e22 100%); padding: 20px; color: white; text-align: center; border-radius: 8px 8px 0 0;'>
+                            <h2 style='margin: 0;'>Service Request Update</h2>
+                        </div>
+                        <div style='background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 0 0 8px 8px;'>
+                            <p style='font-size: 16px;'>Dear " . htmlspecialchars($request['requester_name']) . ",</p>
+                            <p style='font-size: 16px;'>Your service request has been assigned to a technician.</p>
+                            
+                            <div style='background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;'>
+                                <h3 style='color: #f3961c; margin-top: 0;'>Request Details:</h3>
+                                <p><strong>Request ID:</strong> #" . str_pad($request['request_id'], 6, '0', STR_PAD_LEFT) . "</p>
+                                <p><strong>Service Type:</strong> " . htmlspecialchars($request['request_info']) . "</p>
+                                <p><strong>Description:</strong> " . htmlspecialchars($request['request_desc']) . "</p>
+                                <p><strong>Assigned Technician:</strong> " . htmlspecialchars($technician['empName']) . "</p>
+                            </div>
+                            
+                            <div style='text-align: center; margin-top: 20px;'>
+                                <a href='mailto:support@kaamdar.com' style='display: inline-block; padding: 10px 20px; background: #f3961c; color: white; text-decoration: none; border-radius: 5px;'>Contact Support</a>
+                            </div>
+                        </div>
+                    </div>";
+
+                // Send email to technician
+                $tech_subject = "New Work Assignment - KaamDar";
+                $tech_body = "
+                    <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;'>
+                        <div style='background: linear-gradient(135deg, #f3961c 0%, #e67e22 100%); padding: 20px; color: white; text-align: center; border-radius: 8px 8px 0 0;'>
+                            <h2 style='margin: 0;'>New Work Assignment</h2>
+                        </div>
+                        <div style='background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 0 0 8px 8px;'>
+                            <p style='font-size: 16px;'>Dear " . htmlspecialchars($technician['empName']) . ",</p>
+                            <p style='font-size: 16px;'>A new work has been assigned to you.</p>
+                            
+                            <div style='background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;'>
+                                <h3 style='color: #f3961c; margin-top: 0;'>Work Details:</h3>
+                                <p><strong>Request ID:</strong> #" . str_pad($request['request_id'], 6, '0', STR_PAD_LEFT) . "</p>
+                                <p><strong>Service Type:</strong> " . htmlspecialchars($request['request_info']) . "</p>
+                                <p><strong>Description:</strong> " . htmlspecialchars($request['request_desc']) . "</p>
+                                <p><strong>Customer Name:</strong> " . htmlspecialchars($request['requester_name']) . "</p>
+                                <p><strong>Customer Contact:</strong> " . htmlspecialchars($request['requester_mobile']) . "</p>
+                                <p><strong>Customer Email:</strong> " . htmlspecialchars($request['requester_email']) . "</p>
+                                <p><strong>Service Location:</strong> " . htmlspecialchars($request['requester_city']) . "</p>
+                            </div>
+                            
+                            <div style='text-align: center; margin-top: 20px;'>
+                                <a href='mailto:" . htmlspecialchars($request['requester_email']) . "' style='display: inline-block; padding: 10px 20px; background: #f3961c; color: white; text-decoration: none; border-radius: 5px;'>Contact Customer</a>
+                            </div>
+                        </div>
+                    </div>";
+
+                // Send emails using the sendMail function
+                $req_email_sent = sendMail($request['requester_email'], $req_subject, $req_body, $request['requester_name']);
+                $tech_email_sent = sendMail($technician['empEmail'], $tech_subject, $tech_body, $technician['empName']);
+
+                if($req_email_sent && $tech_email_sent) {
+                    $conn->commit();
+                    echo '<div class="alert alert-success">Request updated successfully! Emails have been sent to both the requester and technician.</div>';
+                } else {
+                    $conn->rollback();
+                    echo '<div class="alert alert-warning">Request updated but there was an issue sending the emails. Please check the mail configuration.</div>';
+                }
             } else {
                 throw new Exception("Error updating status");
             }
@@ -116,12 +197,13 @@ if($page > $total_pages) $page = $total_pages;
 // Get requests for current page
 $sql = "SELECT r.*, u.r_name as requester_name, 
         r.status as request_status,
-        t.empName as tech_name
+        t.empName as tech_name,
+        a.assign_tech as assign_tech_id
         FROM submitrequest_tb r 
         LEFT JOIN requesterlogin_tb u ON r.requester_email = u.r_email 
         LEFT JOIN assignwork_tb a ON r.request_id = a.request_id
-        LEFT JOIN technician_tb t ON a.assign_tech = t.empName
-        ORDER BY r.request_date DESC 
+        LEFT JOIN technician_tb t ON a.assign_tech = t.empid
+        ORDER BY r.request_date DESC, r.request_id DESC 
         LIMIT $offset, $records_per_page";
 $result = $conn->query($sql);
 
@@ -232,8 +314,8 @@ $technicians_result = $conn->query($technicians_sql);
                                                         <?php 
                                                         if($technicians_result && $technicians_result->num_rows > 0) {
                                                             while($tech = $technicians_result->fetch_assoc()) {
-                                                                $selected = $tech['empEmail'] == ($row['assign_tech'] ?? '') ? 'selected' : '';
-                                                                echo "<option value='{$tech['empEmail']}' $selected>{$tech['empName']}</option>";
+                                                                $selected = ($tech['empid'] == ($row['assign_tech_id'] ?? '')) ? 'selected' : '';
+                                                                echo "<option value='{$tech['empid']}' $selected>{$tech['empName']}</option>";
                                                             }
                                                             $technicians_result->data_seek(0);
                                                         }

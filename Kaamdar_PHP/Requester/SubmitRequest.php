@@ -28,19 +28,11 @@ if(isset($_REQUEST['submit'])) {
     $requester_mobile = filter_input(INPUT_POST, 'mobile', FILTER_SANITIZE_NUMBER_INT);
     $request_date = date('Y-m-d');
 
-    // Validate mobile number
-    if(strlen($requester_mobile) < 10 || strlen($requester_mobile) > 15) {
-        $msg = '<div class="alert alert-warning" role="alert">Please enter a valid mobile number</div>';
-    }
-    // Validate ZIP code
-    else if(strlen($requester_zip) < 5 || strlen($requester_zip) > 10) {
-        $msg = '<div class="alert alert-warning" role="alert">Please enter a valid ZIP code</div>';
-    }
-    // Check if all required fields are filled
-    else if(empty($request_info) || empty($request_desc) || empty($requester_add1) || 
-            empty($requester_city) || empty($requester_state) || empty($requester_zip) || 
-            empty($requester_mobile)) {
-        $msg = '<div class="alert alert-warning" role="alert">All fields are required</div>';
+    // Validate required fields
+    if(empty($request_info) || empty($request_desc) || empty($requester_name) || 
+       empty($requester_add1) || empty($requester_city) || empty($requester_state) || 
+       empty($requester_zip) || empty($requester_mobile)) {
+        $msg = '<div class="alert alert-warning" role="alert">All fields marked with * are required</div>';
     } else {
         try {
             $sql = "INSERT INTO submitrequest_tb (request_info, request_desc, requester_name, 
@@ -60,6 +52,53 @@ if(isset($_REQUEST['submit'])) {
                 $request_id = $conn->insert_id;
                 $success = true;
                 $msg = '<div class="alert alert-success" role="alert">Request submitted successfully!</div>';
+                
+                // Send confirmation email
+                require_once('../Requester/mail_config.php');
+                
+                $subject = "Service Request Confirmation - KaamDar";
+                $body = "
+                    <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;'>
+                        <div style='background: linear-gradient(135deg, #f3961c 0%, #e67e22 100%); padding: 20px; color: white; text-align: center; border-radius: 8px 8px 0 0;'>
+                            <h2 style='margin: 0;'>Service Request Confirmation</h2>
+                        </div>
+                        <div style='background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 0 0 8px 8px;'>
+                            <p style='font-size: 16px;'>Dear " . htmlspecialchars($requester_name) . ",</p>
+                            <p style='font-size: 16px;'>Thank you for submitting your service request with KaamDar. We have received your request and will process it shortly.</p>
+                            
+                            <div style='background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;'>
+                                <h3 style='color: #f3961c; margin-top: 0;'>Request Details:</h3>
+                                <p><strong>Request ID:</strong> #" . str_pad($request_id, 6, '0', STR_PAD_LEFT) . "</p>
+                                <p><strong>Service Type:</strong> " . htmlspecialchars($request_info) . "</p>
+                                <p><strong>Description:</strong> " . htmlspecialchars($request_desc) . "</p>
+                                <p><strong>Request Date:</strong> " . $request_date . "</p>
+                            </div>
+                            
+                            <div style='background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;'>
+                                <h3 style='color: #f3961c; margin-top: 0;'>Your Information:</h3>
+                                <p><strong>Name:</strong> " . htmlspecialchars($requester_name) . "</p>
+                                <p><strong>Address:</strong> " . htmlspecialchars($requester_add1) . ", " . 
+                                   htmlspecialchars($requester_add2) . ", " . 
+                                   htmlspecialchars($requester_city) . ", " . 
+                                   htmlspecialchars($requester_state) . " - " . 
+                                   htmlspecialchars($requester_zip) . "</p>
+                                <p><strong>Mobile:</strong> " . htmlspecialchars($requester_mobile) . "</p>
+                            </div>
+                            
+                            <p style='font-size: 16px;'>We will review your request and assign a technician soon. You will receive another email once a technician is assigned to your request.</p>
+                            
+                            <div style='text-align: center; margin-top: 30px;'>
+                                <a href='mailto:support@kaamdar.com' style='background: #f3961c; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block;'>Contact Support</a>
+                            </div>
+                        </div>
+                        <div style='text-align: center; margin-top: 20px; color: #666; font-size: 12px;'>
+                            <p>This is an automated email, please do not reply.</p>
+                            <p>&copy; " . date('Y') . " KaamDar. All rights reserved.</p>
+                        </div>
+                    </div>
+                ";
+                
+                sendMail($requester_email, $subject, $body, $requester_name);
                 
                 // Generate receipt
                 $receipt = generateReceipt($request_id, $request_info, $request_desc, $request_date);

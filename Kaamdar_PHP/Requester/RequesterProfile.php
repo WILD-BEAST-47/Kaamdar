@@ -78,36 +78,6 @@ $assigned_work = $stmt->get_result();
             </div>
 
             <div class="col-md-4 mb-4">
-                <div class="card bg-success text-white h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="text-uppercase">Assigned Work</h6>
-                                <h1 class="display-4">
-                                    <?php
-                                    $sql = "SELECT COUNT(*) FROM assignwork_tb a 
-                                            JOIN submitrequest_tb s ON a.request_id = s.request_id 
-                                            WHERE s.requester_email = ?";
-                                    $stmt = $conn->prepare($sql);
-                                    $stmt->bind_param("s", $rEmail);
-                                    $stmt->execute();
-                                    $result = $stmt->get_result();
-                                    $row = mysqli_fetch_row($result);
-                                    echo $row[0];
-                                    ?>
-                                </h1>
-                            </div>
-                            <i class="fas fa-tasks fa-2x"></i>
-                        </div>
-                    </div>
-                    <div class="card-footer d-flex align-items-center justify-content-between">
-                        <a class="small text-white stretched-link" href="#assignedWorkSection">View Details</a>
-                        <div class="small text-white"><i class="fas fa-angle-right"></i></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-4 mb-4">
                 <div class="card bg-warning text-white h-100">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-center">
@@ -121,104 +91,6 @@ $assigned_work = $stmt->get_result();
                     <div class="card-footer d-flex align-items-center justify-content-between">
                         <a class="small text-white stretched-link" href="SubmitRequest.php">Submit Request</a>
                         <div class="small text-white"><i class="fas fa-angle-right"></i></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="row mt-4">
-            <div class="col-md-12">
-                <div class="card shadow-sm" id="assignedWorkSection">
-                    <div class="card-header">
-                        <h5 class="mb-0">Assigned Work</h5>
-                    </div>
-                    <div class="card-body">
-                        <?php if($assigned_work->num_rows > 0): ?>
-                            <div class="table-responsive">
-                                <table class="table table-hover">
-                                    <thead>
-                                        <tr>
-                                            <th>Request ID</th>
-                                            <th>Service Type</th>
-                                            <th>Description</th>
-                                            <th>Assigned Technician</th>
-                                            <th>Assignment Date</th>
-                                            <th>Status</th>
-                                            <th>Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php while($row = $assigned_work->fetch_assoc()): ?>
-                                            <tr>
-                                                <td>#<?php echo str_pad($row['request_id'], 6, '0', STR_PAD_LEFT); ?></td>
-                                                <td><?php echo htmlspecialchars($row['request_info']); ?></td>
-                                                <td><?php echo htmlspecialchars($row['request_desc']); ?></td>
-                                                <td><?php echo htmlspecialchars($row['empName']); ?></td>
-                                                <td><?php echo date('d M Y', strtotime($row['assign_date'])); ?></td>
-                                                <td>
-                                                    <span class="badge bg-success">Assigned</span>
-                                                </td>
-                                                <td>
-                                                    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#workDetailsModal<?php echo $row['request_id']; ?>">
-                                                        View Details
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        <?php endwhile; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <!-- Work Details Modal -->
-                            <?php 
-                            $assigned_work->data_seek(0); // Reset the result pointer
-                            while($row = $assigned_work->fetch_assoc()): 
-                            ?>
-                            <div class="modal fade" id="workDetailsModal<?php echo $row['request_id']; ?>" tabindex="-1" aria-labelledby="workDetailsModalLabel<?php echo $row['request_id']; ?>" aria-hidden="true">
-                                <div class="modal-dialog modal-lg">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <h5 class="modal-title" id="workDetailsModalLabel<?php echo $row['request_id']; ?>">
-                                                Work Details - Request #<?php echo str_pad($row['request_id'], 6, '0', STR_PAD_LEFT); ?>
-                                            </h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                        </div>
-                                        <div class="modal-body">
-                                            <div class="row">
-                                                <div class="col-md-6">
-                                                    <h6>Request Information</h6>
-                                                    <p><strong>Service Type:</strong> <?php echo htmlspecialchars($row['request_info']); ?></p>
-                                                    <p><strong>Description:</strong> <?php echo htmlspecialchars($row['request_desc']); ?></p>
-                                                    <p><strong>Request Date:</strong> <?php echo date('d M Y', strtotime($row['assign_date'])); ?></p>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <h6>Technician Information</h6>
-                                                    <p><strong>Name:</strong> <?php echo htmlspecialchars($row['empName']); ?></p>
-                                                    <p><strong>Contact:</strong> <?php echo htmlspecialchars($row['empMobile']); ?></p>
-                                                </div>
-                                            </div>
-                                            <div class="row mt-3">
-                                                <div class="col-12">
-                                                    <h6>Your Information</h6>
-                                                    <p><strong>Name:</strong> <?php echo htmlspecialchars($row['requester_name']); ?></p>
-                                                    <p><strong>Address:</strong> <?php echo htmlspecialchars($row['requester_add1'] . ', ' . $row['requester_city'] . ', ' . $row['requester_state'] . ' - ' . $row['requester_zip']); ?></p>
-                                                    <p><strong>Mobile:</strong> <?php echo htmlspecialchars($row['requester_mobile']); ?></p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <?php endwhile; ?>
-
-                        <?php else: ?>
-                            <div class="alert alert-info">
-                                No work has been assigned to you yet.
-                            </div>
-                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -269,6 +141,117 @@ $assigned_work = $stmt->get_result();
         </div>
     </div>
 </div>
+
+<style>
+/* Modal Fixes */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1050;
+    display: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal.show {
+    display: flex;
+}
+
+.modal-content {
+    position: relative;
+    width: 90%;
+    max-width: 800px;
+    max-height: 90vh;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.modal-body {
+    position: relative;
+    flex: 1 1 auto;
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+.modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 1rem;
+    border-top: 1px solid #dee2e6;
+}
+
+/* Remove Bootstrap's default modal backdrop */
+.modal-backdrop {
+    display: none;
+}
+
+body.modal-open {
+    overflow: hidden;
+    padding-right: 0 !important;
+}
+
+/* Ensure modal is clickable */
+.modal * {
+    pointer-events: auto;
+}
+
+/* Prevent body scroll when modal is open */
+body.modal-open {
+    overflow: hidden;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle modal show/hide
+    const modal = document.getElementById('workDetailsModal');
+    
+    modal.addEventListener('show.bs.modal', function(event) {
+        const button = event.relatedTarget;
+        
+        // Get data from button attributes
+        const requestId = button.getAttribute('data-request-id');
+        const requestInfo = button.getAttribute('data-request-info');
+        const requestDesc = button.getAttribute('data-request-desc');
+        const requestDate = button.getAttribute('data-request-date');
+        const techName = button.getAttribute('data-tech-name');
+        const techContact = button.getAttribute('data-tech-contact');
+        const assignDate = button.getAttribute('data-assign-date');
+        const requesterName = button.getAttribute('data-requester-name');
+        const requesterAddress = button.getAttribute('data-requester-address');
+        const requesterMobile = button.getAttribute('data-requester-mobile');
+        
+        // Update modal content
+        document.getElementById('modal-request-id').textContent = '#' + requestId;
+        document.getElementById('modal-request-info').textContent = requestInfo;
+        document.getElementById('modal-request-desc').textContent = requestDesc;
+        document.getElementById('modal-request-date').textContent = requestDate;
+        document.getElementById('modal-tech-name').textContent = techName;
+        document.getElementById('modal-tech-contact').textContent = techContact;
+        document.getElementById('modal-assign-date').textContent = assignDate;
+        document.getElementById('modal-requester-name').textContent = requesterName;
+        document.getElementById('modal-requester-address').textContent = requesterAddress;
+        document.getElementById('modal-requester-mobile').textContent = requesterMobile;
+    });
+});
+</script>
 
 <?php
 include('includes/footer.php'); 

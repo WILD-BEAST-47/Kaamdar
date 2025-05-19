@@ -34,7 +34,7 @@ $sql = "SELECT r.*, u.r_name as requester_name,
         FROM submitrequest_tb r 
         LEFT JOIN requesterlogin_tb u ON r.requester_email = u.r_email 
         LEFT JOIN assignwork_tb a ON r.request_id = a.request_id
-        LEFT JOIN technician_tb t ON a.assign_tech = t.empName
+        LEFT JOIN technician_tb t ON a.assign_tech = t.empid
         ORDER BY r.request_date DESC, r.request_id DESC 
         LIMIT $offset, $records_per_page";
 $result = $conn->query($sql);

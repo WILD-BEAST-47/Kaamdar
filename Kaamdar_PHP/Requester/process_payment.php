@@ -2,6 +2,10 @@
 session_start();
 include('../dbConnection.php');
 
+// Debug information
+error_log("Process Payment - GET Parameters: " . print_r($_GET, true));
+error_log("Process Payment - Session: " . print_r($_SESSION, true));
+
 // Check if user is logged in
 if(!isset($_SESSION['is_login'])) {
     echo "<script> location.href='../RequesterLogin.php'; </script>";
@@ -22,10 +26,10 @@ if(!$pidx || !$status) {
 
 try {
     // Verify payment with Khalti
-    $secret_key = "57034cd32760445d81f87c5ac493c0d8";
+    $khalti_secret_key = '7b9bb2d3a2aa4de08af26c3653733895';
     
     // Khalti verification endpoint
-    $url = "https://a.khalti.com/api/v2/epayment/lookup/";
+    $url = "https://khalti.com/api/v2/epayment/lookup/";
     
     // Prepare verification data
     $verification_data = [
@@ -40,9 +44,11 @@ try {
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($verification_data));
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Authorization: Key ' . $secret_key,
+        'Authorization: Key ' . $khalti_secret_key,
         'Content-Type: application/json'
     ]);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
     
     // Execute cURL request
     $response = curl_exec($ch);
@@ -87,8 +93,8 @@ try {
             $stmt->close();
             
             // Insert into orders table
-            $order_sql = "INSERT INTO orders_tb (user_id, total_amount, payment_method, payment_status, created_at) 
-                         VALUES (?, ?, 'Khalti', 'Paid', NOW())";
+            $order_sql = "INSERT INTO orders_tb (user_id, total_amount, payment_method, payment_status, order_status, created_at) 
+                         VALUES (?, ?, 'Khalti', 'Paid', 'Paid', NOW())";
             $stmt = $conn->prepare($order_sql);
             $stmt->bind_param("id", $user_id, $total_amount);
             $stmt->execute();
@@ -130,8 +136,8 @@ try {
             // Clear payment details from session
             unset($_SESSION['payment_details']);
             
-            // Redirect to cart with success message
-            header("Location: cart.php");
+            // Redirect to my orders page
+            header("Location: my-orders.php");
             exit;
             
         } catch (Exception $e) {
